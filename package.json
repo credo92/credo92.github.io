@@ -1,0 +1,22 @@
+{
+  "name": "credo92.github.io",
+  "version": "1.0.0",
+  "description": "17th sept'16",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/credo92/credo92.github.io.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/credo92/credo92.github.io/issues"
+  },
+  "homepage": "https://github.com/credo92/credo92.github.io#readme",
+  "devDependencies": {
+    "gulp-autoprefixer": "^3.1.1"
+  }
+}
