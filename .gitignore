@@ -1,0 +1,7 @@
+# macOS
+.DS_Store
+
+# Hugo (dormant — site is served from the static root index.html)
+/public/
+/resources/
+.hugo_build.lock
