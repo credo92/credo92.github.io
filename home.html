@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
-  <title>About Vipul Srivastava — Maker of NewsFlow</title>
-  <meta name="description" content="Vipul Srivastava — maker of NewsFlow, an AI-narrated news service that turns the day's headlines into a personalized 5-minute audio briefing." />
+  <title>About Vipul Srivastava — Software Developer</title>
+  <meta name="description" content="Vipul Srivastava — a Montreal software developer building products end-to-end, from NewsFlow and LoanReady to experiments with local LLMs." />
   <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -130,12 +130,6 @@
       font-size: .6875rem; font-weight: 600; text-transform: uppercase;
       letter-spacing: .08em; color: var(--theme-fg-subtle); margin: 0 0 1rem;
     }
-    ul.stack { list-style: none; padding: 0; margin: 0; }
-    ul.stack li { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .9rem; }
-    ul.stack .emoji { font-size: 1rem; line-height: 1.3; margin-top: .1rem; }
-    ul.stack .title { font-size: .875rem; font-weight: 600; line-height: 1.35; }
-    ul.stack .desc { font-size: .75rem; line-height: 1.6; color: var(--theme-fg-subtle); margin-top: .1rem; }
-
     /* Project cards */
     .projects { display: grid; gap: .75rem; }
     .project {
@@ -157,13 +151,6 @@
       padding: .12rem .45rem; border: 1px solid var(--theme-border); border-radius: 9999px;
     }
 
-    .langs { display: flex; flex-wrap: wrap; gap: .5rem .75rem; }
-    .langs .lang {
-      font-size: .8125rem; color: var(--theme-fg-muted);
-      padding: .2rem .6rem; border: 1px solid var(--theme-border);
-      border-radius: 9999px; background: var(--theme-bg-subtle);
-    }
-
     footer {
       border-top: 1px solid var(--theme-border);
       padding: 1.5rem 1.25rem 2.5rem;
@@ -179,20 +166,20 @@
 <body>
   <div class="page">
     <main>
-      <a class="back" href="https://newsflowhq.com" target="_blank" rel="noopener">← Back to today's news</a>
+      <a class="back" href="/">← Back to the coding agent</a>
 
       <div class="hero">
         <div class="avatar" aria-hidden="true">VS</div>
         <div>
           <p class="eyebrow">Hi, I'm</p>
           <h1 class="headline">Vipul Srivastava</h1>
-          <p class="sub">Maker of NewsFlow.</p>
+          <p class="sub">Software developer · Montreal, QC</p>
         </div>
       </div>
 
       <div class="intro">
-        <p class="lead">I built NewsFlow because I wanted a service for myself — something that catches me up on the day's news in a few minutes, without having to scroll through social media to figure out what's happening.</p>
-        <p class="small">The same tools you're using are the ones I use every morning. If it works for me, hopefully it works for you too.</p>
+        <p class="lead">I like building complete products end-to-end — from the first idea to something you can actually use. Lately that's meant an AI news service, a loan-cost tool, and a few experiments with local LLMs.</p>
+        <p class="small">I build things I'd want to use myself, and I ship with AI coding tools in the loop the whole way. The in-browser agent on this site is a small taste of that.</p>
       </div>
 
       <div class="pills">
@@ -242,39 +229,14 @@
           </a>
         </div>
       </section>
-
-      <section>
-        <h2>How NewsFlow is built</h2>
-        <ul class="stack">
-          <li><span class="emoji">⚛️</span><div><div class="title">Next.js · React · TypeScript · Tailwind</div><div class="desc">Frontend framework, components, and styles.</div></div></li>
-          <li><span class="emoji">☁️</span><div><div class="title">AWS Amplify + DynamoDB</div><div class="desc">Hosting for the website and storage for subscriber records.</div></div></li>
-          <li><span class="emoji">📰</span><div><div class="title">RSS aggregation + Local Sources</div><div class="desc">Headlines from major publishers in 10 countries.</div></div></li>
-          <li><span class="emoji">🎙️</span><div><div class="title">Google Translate TTS · Microsoft Edge Neural TTS</div><div class="desc">Two text-to-speech engines — instant playback on the site, premium voices for the video pipeline.</div></div></li>
-          <li><span class="emoji">📺</span><div><div class="title">FFmpeg</div><div class="desc">Coming soon — vertical YouTube Shorts with a news-anchor avatar.</div></div></li>
-          <li><span class="emoji">✉️</span><div><div class="title">Resend</div><div class="desc">Daily briefing emails. If readers want it on WhatsApp too, that's where we'll go next.</div></div></li>
-          <li><span class="emoji">🌐</span><div><div class="title">BigDataCloud reverse-geocoding</div><div class="desc">"Use my location" without API keys.</div></div></li>
-          <li><span class="emoji">🤖</span><div><div class="title">OpenCode · Claude Code</div><div class="desc">AI coding assistants that pair-built this whole thing alongside me.</div></div></li>
-        </ul>
-      </section>
-
-      <section>
-        <h2>Read in</h2>
-        <div class="langs">
-          <span class="lang">English</span>
-          <span class="lang">हिंदी</span>
-          <span class="lang">Français</span>
-          <span class="lang">Deutsch</span>
-          <span class="lang">日本語</span>
-          <span class="lang">தமிழ்</span>
-          <span class="lang">বাংলা</span>
-        </div>
-      </section>
     </main>
 
     <footer>
-      NewsFlow is free for everyone. No accounts required to listen.<br />
-      © 2026 NewsFlow <span class="sep">·</span> AI-narrated news in your language <span class="sep">·</span>
-      <a href="https://newsflowhq.com" target="_blank" rel="noopener">Open NewsFlow</a>
+      Built in Montreal, mostly with AI coding tools in the loop.<br />
+      © 2026 Vipul Srivastava <span class="sep">·</span>
+      <a href="https://github.com/credo92" target="_blank" rel="noopener">@credo92</a> <span class="sep">·</span>
+      <a href="https://github.com/vsrivastav-pm" target="_blank" rel="noopener">@vsrivastav-pm</a> <span class="sep">·</span>
+      <a href="https://www.linkedin.com/in/vipul-srivastav/" target="_blank" rel="noopener">LinkedIn</a>
     </footer>
   </div>
 </body>
