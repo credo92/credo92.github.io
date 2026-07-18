@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>What are LLM evals? — An in-browser playground</title>
+  <meta name="description" content="A hands-on explainer of LLM evaluation: ground truth, exact match, fuzzy similarity, and LLM-as-a-judge — running entirely in your browser, with charts you can read." />
+  <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ---------- Theme ---------- */
+    :root {
+      --theme-bg: #fff;
+      --theme-bg-subtle: #f7f7f5;
+      --theme-fg: #121212;
+      --theme-fg-muted: #333;
+      --theme-fg-subtle: #666;
+      --theme-accent: #326891;
+      --theme-accent-fg: #fff;
+      --theme-border: #e2e2e2;
+      --theme-border-strong: #ccc;
+
+      /* viz roles (light) — validated against surface #f7f7f5 */
+      --surface-1: #f7f7f5;
+      --series-1: #2a78d6;   /* cheap metric  (circle) */
+      --series-2: #008300;   /* LLM judge     (square) */
+      --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5;
+      --seq-550: #1c5cab; --seq-700: #0d366b;
+      --status-good: #0ca30c;
+      --status-critical: #d03b3b;
+      --status-warning: #fab219;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --ink-muted: #898781;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        --theme-bg: #121212;
+        --theme-bg-subtle: #1b1b1b;
+        --theme-fg: #f4f4f2;
+        --theme-fg-muted: #cfcfcf;
+        --theme-fg-subtle: #9a9a9a;
+        --theme-accent: #6ea8d0;
+        --theme-accent-fg: #0d1116;
+        --theme-border: #2a2a2a;
+        --theme-border-strong: #3a3a3a;
+
+        --surface-1: #1b1b1b;
+        --series-1: #3987e5;
+        --series-2: #008300;
+        --grid: #2c2c2a;
+        --axis: #383835;
+      }
+    }
+    :root[data-theme="dark"] {
+      --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+      --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+      --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+      --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+      --surface-1: #1b1b1b; --series-1: #3987e5; --series-2: #008300;
+      --grid: #2c2c2a; --axis: #383835;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background:
+        radial-gradient(900px 460px at 84% -6%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 60%),
+        var(--theme-bg);
+      color: var(--theme-fg);
+      font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+    .headline { font-family: "Libre Baskerville", Georgia, serif; }
+    a { color: inherit; }
+
+    main { width: 100%; max-width: 60rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    @media (min-width: 640px) { main { padding: 4rem 1.5rem 5rem; } }
+
+    .back { display: inline-block; font-size: .75rem; font-weight: 500; color: var(--theme-fg-subtle); text-decoration: none; margin-bottom: 1.75rem; }
+    .back:hover { opacity: .7; }
+
+    h1 { font-size: 2rem; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; margin: 0 0 .6rem; }
+    @media (min-width: 640px) { h1 { font-size: 2.5rem; } }
+    .dek { font-size: 1.05rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 46rem; }
+
+    section { margin-top: 3rem; }
+    section > h2 {
+      font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--theme-fg-subtle); margin: 0 0 .35rem;
+      border-top: 1px solid var(--theme-border); padding-top: 1.5rem;
+    }
+    section > .lede { font-size: 1.375rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 .5rem; }
+    section > p.note { font-size: .9rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 46rem; }
+
+    /* ---------- Concept cards ---------- */
+    .concepts { display: grid; gap: .75rem; grid-template-columns: 1fr; }
+    @media (min-width: 700px) { .concepts { grid-template-columns: 1fr 1fr; } }
+    .concept {
+      padding: 1rem 1.1rem; border: 1px solid var(--theme-border); border-radius: .75rem;
+      background: var(--theme-bg-subtle);
+    }
+    .concept .k { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .95rem; margin-bottom: .3rem; }
+    .concept .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .concept p { margin: 0; font-size: .8125rem; color: var(--theme-fg-muted); line-height: 1.6; }
+    .concept .ex { margin-top: .5rem; font-size: .72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-fg-subtle); }
+
+    /* ---------- Controls ---------- */
+    .controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+      padding: .9rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem;
+      background: var(--theme-bg-subtle); margin-bottom: 1rem;
+    }
+    .controls label { font-size: .75rem; color: var(--theme-fg-subtle); }
+    button, select {
+      font: inherit; font-size: .8125rem; padding: .45rem .8rem; border-radius: .5rem;
+      border: 1px solid var(--theme-border-strong); background: var(--theme-bg); color: var(--theme-fg); cursor: pointer;
+    }
+    button.primary { background: var(--theme-accent); color: var(--theme-accent-fg); border-color: var(--theme-accent); font-weight: 600; }
+    button:hover:not(:disabled) { border-color: var(--theme-accent); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .runstate { font-size: .75rem; color: var(--theme-fg-subtle); }
+    .runstate b { color: var(--theme-accent); }
+
+    /* ---------- KPI tiles ---------- */
+    .kpis { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 760px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+    .kpi { padding: .9rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--surface-1); }
+    .kpi .lab { font-size: .6875rem; text-transform: uppercase; letter-spacing: .06em; color: var(--theme-fg-subtle); }
+    .kpi .val { font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin-top: .15rem; }
+    .kpi .sub { font-size: .7rem; color: var(--theme-fg-subtle); }
+
+    /* ---------- Chart cards ---------- */
+    .card {
+      border: 1px solid var(--theme-border); border-radius: .75rem;
+      background: var(--surface-1); padding: 1.1rem 1.2rem; margin-top: .9rem;
+    }
+    .card h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .15rem; }
+    .card .cap { font-size: .78rem; color: var(--theme-fg-subtle); margin: 0 0 .9rem; }
+    .scroll { overflow-x: auto; }
+    svg { display: block; max-width: 100%; height: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .75rem; color: var(--theme-fg-muted); margin-bottom: .7rem; }
+    .legend .item { display: inline-flex; align-items: center; gap: .35rem; }
+
+    /* ---------- Table ---------- */
+    .tablewrap { overflow-x: auto; margin-top: .9rem; border: 1px solid var(--theme-border); border-radius: .75rem; }
+    table { border-collapse: collapse; width: 100%; font-size: .8rem; min-width: 46rem; }
+    th, td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--theme-border); vertical-align: top; }
+    th { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--theme-fg-subtle); font-weight: 600; background: var(--theme-bg-subtle); position: sticky; top: 0; }
+    td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .chip { display: inline-flex; align-items: center; gap: .28rem; font-size: .68rem; font-weight: 600; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
+    .chip.pass { color: var(--status-good); background: color-mix(in srgb, var(--status-good) 12%, transparent); }
+    .chip.fail { color: var(--status-critical); background: color-mix(in srgb, var(--status-critical) 12%, transparent); }
+    .chip.warn { color: var(--status-warning); background: color-mix(in srgb, var(--status-warning) 16%, transparent); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem; }
+    .muted { color: var(--theme-fg-subtle); }
+
+    details.judge { margin-top: .3rem; }
+    details.judge summary { cursor: pointer; font-size: .7rem; color: var(--theme-accent); }
+    details.judge p { margin: .3rem 0 0; font-size: .72rem; color: var(--theme-fg-muted); }
+
+    /* ---------- Tooltip ---------- */
+    #tip {
+      position: fixed; pointer-events: none; z-index: 50; opacity: 0; transition: opacity .1s;
+      background: var(--theme-fg); color: var(--theme-bg); font-size: .72rem; line-height: 1.35;
+      padding: .35rem .5rem; border-radius: .35rem; max-width: 16rem; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+    #tip.on { opacity: 1; }
+
+    pre.code {
+      background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: .6rem;
+      padding: .8rem .9rem; overflow-x: auto; font-size: .72rem; line-height: 1.5; margin: .6rem 0 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    footer { border-top: 1px solid var(--theme-border); margin-top: 3rem; padding-top: 1.25rem; font-size: .75rem; color: var(--theme-fg-subtle); text-align: center; }
+    footer a { color: var(--theme-accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+<div id="tip" role="tooltip"></div>
+<main>
+  <a class="back" href="/">← Back to the coding agent</a>
+
+  <h1 class="headline">What is an <em>eval</em>?</h1>
+  <p class="dek">
+    An <b>eval</b> is a test suite for a model. You can't assert <code>output === expected</code> on
+    free-form text, so instead you score it — several different ways, because every scoring method is
+    wrong in its own way. This page runs a real eval suite <b>entirely in your browser</b> and shows
+    you what each method sees.
+  </p>
+
+  <!-- ============ CONCEPTS ============ -->
+  <section>
+    <h2>The four scorers</h2>
+    <p class="lede">Every method disagrees with the others. That's the point.</p>
+    <p class="note">
+      Each test case below is scored four ways. Watch where they disagree — a case can pass the cheap
+      string check and fail the judge, or produce broken JSON while still being semantically right.
+    </p>
+    <div class="concepts">
+      <div class="concept">
+        <div class="k"><span class="swatch" style="background:var(--theme-fg-subtle)"></span>Ground truth</div>
+        <p>The hand-labeled right answer. Everything else is measured against it. Expensive to produce, which is why eval sets stay small and precious.</p>
+        <div class="ex">gold: { sentiment: "neutral", summary: "…" }</div>
+      </div>
+      <div class="concept">
+        <div class="k"><span class="swatch" style="background:var(--seq-550)"></span>Exact match</div>
+        <p>Did the label come back <em>exactly</em> right? Cheap, deterministic, zero nuance — perfect for classification, useless for prose.</p>
+        <div class="ex">pred === gold → 1 else 0</div>
+      </div>
+      <div class="concept">
+        <div class="k"><span class="swatch" style="background:var(--series-1)"></span>Fuzzy similarity (token F1)</div>
+        <p>Word overlap between the model's summary and the reference. Catches "close enough", but rewards copying words and misses meaning.</p>
+        <div class="ex">2·P·R / (P+R) over shared tokens</div>
+      </div>
+      <div class="concept">
+        <div class="k"><span class="swatch" style="background:var(--series-2)"></span>LLM as a judge</div>
+        <p>A second model grades the answer 1–5 against a rubric and explains itself. Catches meaning the string metrics miss — but it's slower, costs money, and can be confidently wrong.</p>
+        <div class="ex">rubric → score 1–5 → normalized 0–1</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RUN ============ -->
+  <section>
+    <h2>The run</h2>
+    <p class="lede">Score 8 support tickets, four ways.</p>
+    <p class="note">
+      The task: read a customer message, return JSON with a <code>sentiment</code> label and a one-line
+      <code>summary</code>. <b>Demo</b> uses recorded outputs from a small model so the charts render instantly.
+      <b>Live</b> runs the real model on your GPU — first load downloads ~1&nbsp;GB of weights.
+    </p>
+    <div class="controls">
+      <button class="primary" id="run-demo">▸ Run demo eval</button>
+      <label for="model">Live model</label>
+      <select id="model">
+        <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B</option>
+        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B</option>
+      </select>
+      <button id="run-live">Run live in-browser</button>
+      <button id="export">⤓ Export Langfuse traces</button>
+      <span class="runstate" id="runstate">Showing recorded demo run.</span>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h3>Score by method</h3>
+      <p class="cap">Mean score across all 8 cases, per scorer. Darker = higher.</p>
+      <div class="scroll" id="chart-methods"></div>
+    </div>
+
+    <div class="card">
+      <h3>Where the cheap metric and the judge disagree</h3>
+      <p class="cap">One row per test case. Distance between the two marks is the disagreement.</p>
+      <div class="legend">
+        <span class="item"><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="var(--series-1)"/></svg> Token F1 (cheap)</span>
+        <span class="item"><svg width="14" height="14" aria-hidden="true"><rect x="2.5" y="2.5" width="9" height="9" rx="2" fill="var(--series-2)"/></svg> LLM judge</span>
+      </div>
+      <div class="scroll" id="chart-dumbbell"></div>
+    </div>
+
+    <div class="card">
+      <h3>Confusion matrix — sentiment label</h3>
+      <p class="cap">Rows are the true label, columns are what the model predicted. The diagonal is correct.</p>
+      <div class="scroll" id="chart-confusion"></div>
+    </div>
+  </section>
+
+  <!-- ============ TABLE ============ -->
+  <section>
+    <h2>Case by case</h2>
+    <p class="lede">The table view — every score, every judge rationale.</p>
+    <p class="note">This is the same data as the charts above, in full. Charts show you the shape; the table is where you debug.</p>
+    <div class="tablewrap">
+      <table id="results">
+        <thead>
+          <tr>
+            <th>#</th><th>Customer message</th><th>Gold</th><th>Predicted</th>
+            <th>Exact</th><th>F1</th><th>Judge</th><th>JSON</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ LANGFUSE ============ -->
+  <section>
+    <h2>Wiring this to real tooling</h2>
+    <p class="lede">In production you'd ship these scores to Langfuse.</p>
+    <p class="note">
+      Langfuse is a server-side observability platform — it needs a backend and secret API keys, so it
+      can't run on a static site like this one (a key in frontend JS is a public key). What this page
+      <em>can</em> do is emit traces in Langfuse's shape: hit <b>Export Langfuse traces</b> above to
+      download the run. In a real service you'd POST the same objects from your backend:
+    </p>
+    <pre class="code">// server-side only — never in the browser
+import { Langfuse } from "langfuse";
+const lf = new Langfuse({ secretKey: process.env.LANGFUSE_SECRET_KEY });
+
+const trace = lf.trace({ name: "sentiment-eval", metadata: { suite: "support-tickets" } });
+for (const c of cases) {
+  const gen = trace.generation({ name: "classify", input: c.input, output: c.raw });
+  gen.score({ name: "exact_match", value: c.exact });   // 0 or 1
+  gen.score({ name: "token_f1",    value: c.f1 });      // 0..1
+  gen.score({ name: "llm_judge",   value: c.judge,      // 0..1
+              comment: c.rationale });
+}</pre>
+  </section>
+
+  <footer>
+    Runs 100% in your browser — no server, no API keys.
+    <a href="/home.html">About Vipul</a> · <a href="/">Coding agent</a>
+  </footer>
+</main>
+
+<script type="module">
+/* ============================================================
+   1. THE EVAL SET — ground truth, hand-labeled
+   ============================================================ */
+const CASES = [
+  { id:1, input:"The delivery arrived two days early and the packaging was perfect.",
+    gold:"positive", goldSummary:"Order arrived early in perfect packaging." },
+  { id:2, input:"I've been on hold for 45 minutes and nobody has picked up.",
+    gold:"negative", goldSummary:"Customer waited 45 minutes on hold with no answer." },
+  { id:3, input:"The product works as described. Nothing special, nothing wrong.",
+    gold:"neutral",  goldSummary:"Product works as described, unremarkable." },
+  { id:4, input:"Charged me twice for the same order and support keeps closing my ticket.",
+    gold:"negative", goldSummary:"Double charged and support repeatedly closed the ticket." },
+  { id:5, input:"Setup took ten minutes and the app walked me through every step.",
+    gold:"positive", goldSummary:"Quick ten-minute setup with helpful in-app guidance." },
+  { id:6, input:"It shipped on the date they said it would.",
+    gold:"neutral",  goldSummary:"Order shipped on the promised date." },
+  { id:7, input:"The screen cracked after one week and the warranty doesn't cover it.",
+    gold:"negative", goldSummary:"Screen cracked within a week and warranty excluded it." },
+  { id:8, input:"Best customer service I've had in years — they refunded me instantly.",
+    gold:"positive", goldSummary:"Instant refund and outstanding customer service." },
+];
+
+/* Recorded outputs from a small local model (demo mode).
+   Deliberately imperfect — that's what makes the eval interesting. */
+const DEMO_RAW = {
+  1: '{"sentiment": "positive", "summary": "Delivery arrived two days early with perfect packaging."}',
+  2: '{"sentiment": "negative", "summary": "On hold 45 minutes with nobody answering."}',
+  3: '{"sentiment": "positive", "summary": "The product works."}',
+  4: '{"sentiment": "negative", "summary": "Billing problem, ticket closed."}',
+  5: '{"sentiment": "positive", "summary": "Setup was quick and the app guided every step."}',
+  6: '{"sentiment": "positive", "summary": "It shipped on the promised date."}',
+  7: '{"sentiment": "negative", "summary": "Screen cracked in a week and warranty did not cover it."}',
+  8: '{sentiment: "positive", summary: "Instant refund, best service in years."} — hope this helps!',
+};
+/* Judge scores (1-5) a second model gave, with its stated reason. */
+const DEMO_JUDGE = {
+  1:{s:5,r:"Correct label and the summary captures both the early delivery and the packaging."},
+  2:{s:5,r:"Correct label; summary preserves the 45-minute detail and the lack of response."},
+  3:{s:2,r:"Label is wrong — this is neutral, not positive. Summary is also thin, dropping 'nothing wrong'."},
+  4:{s:3,r:"Label correct, but the summary is vague: 'billing problem' loses the double-charge specifics."},
+  5:{s:5,r:"Correct label and a faithful, complete summary."},
+  6:{s:2,r:"Label wrong — a factual shipping statement is neutral, not positive. Summary itself is accurate."},
+  7:{s:5,r:"Correct label and the summary keeps both the timeframe and the warranty denial."},
+  8:{s:4,r:"Content is right and well-summarized, but the response is not valid JSON."},
+};
+
+/* ============================================================
+   2. THE SCORERS
+   ============================================================ */
+const tokens = s => (s||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean);
+
+/** Exact match on the label. Deterministic, binary. */
+const exactMatch = (pred, gold) =>
+  (pred||"").trim().toLowerCase() === gold.trim().toLowerCase() ? 1 : 0;
+
+/** Token-overlap F1 between predicted and reference summary. */
+function tokenF1(pred, gold) {
+  const p = tokens(pred), g = tokens(gold);
+  if (!p.length || !g.length) return 0;
+  const counts = {};
+  g.forEach(t => counts[t] = (counts[t]||0) + 1);
+  let overlap = 0;
+  p.forEach(t => { if (counts[t] > 0) { counts[t]--; overlap++; } });
+  if (!overlap) return 0;
+  const precision = overlap / p.length, recall = overlap / g.length;
+  return (2 * precision * recall) / (precision + recall);
+}
+
+/** Strict format check: must be parseable JSON with the required keys. */
+function parseStrict(raw) {
+  try {
+    const o = JSON.parse(raw);
+    if (o && typeof o.sentiment === "string" && typeof o.summary === "string") return o;
+    return null;
+  } catch { return null; }
+}
+/** Lenient fallback — what you'd actually do in production when JSON fails. */
+function parseLenient(raw) {
+  const s = /sentiment"?\s*:\s*"([^"]+)"/i.exec(raw);
+  const m = /summary"?\s*:\s*"([^"]+)"/i.exec(raw);
+  return { sentiment: s ? s[1] : "", summary: m ? m[1] : "" };
+}
+
+/* ============================================================
+   3. RUN
+   ============================================================ */
+const LABELS = ["positive","negative","neutral"];
+let RESULTS = [];
+
+function scoreOne(c, raw, judge) {
+  const strict = parseStrict(raw);
+  const parsed = strict || parseLenient(raw);
+  const exact = exactMatch(parsed.sentiment, c.gold);
+  const f1 = tokenF1(parsed.summary, c.goldSummary);
+  return {
+    ...c, raw,
+    pred: parsed.sentiment || "—",
+    predSummary: parsed.summary || "—",
+    exact, f1,
+    judge: judge.s / 5,
+    judgeRaw: judge.s,
+    rationale: judge.r,
+    jsonValid: strict ? 1 : 0,
+  };
+}
+
+function runDemo() {
+  RESULTS = CASES.map(c => scoreOne(c, DEMO_RAW[c.id], DEMO_JUDGE[c.id]));
+  render();
+  setState("Showing recorded demo run.");
+}
+
+/* ============================================================
+   4. RENDER
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const pct = v => Math.round(v * 100) + "%";
+const mean = a => a.reduce((x,y)=>x+y,0) / (a.length||1);
+const setState = html => $("#runstate").innerHTML = html;
+
+/* --- Tooltip helper (hover layer) --- */
+const tip = $("#tip");
+function bindTip(el, html) {
+  el.addEventListener("mousemove", e => {
+    tip.innerHTML = html; tip.classList.add("on");
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 260) + "px";
+    tip.style.top  = (e.clientY + 16) + "px";
+  });
+  el.addEventListener("mouseleave", () => tip.classList.remove("on"));
+}
+
+function render() {
+  renderKPIs();
+  renderMethods();
+  renderDumbbell();
+  renderConfusion();
+  renderTable();
+}
+
+/* --- KPI tiles (a headline number is not a chart) --- */
+function renderKPIs() {
+  const acc   = mean(RESULTS.map(r => r.exact));
+  const f1    = mean(RESULTS.map(r => r.f1));
+  const judge = mean(RESULTS.map(r => r.judge));
+  const json  = mean(RESULTS.map(r => r.jsonValid));
+  const tiles = [
+    { lab:"Label accuracy", val:pct(acc),   sub:`${RESULTS.filter(r=>r.exact).length} of ${RESULTS.length} exact` },
+    { lab:"Mean token F1",  val:f1.toFixed(2), sub:"summary word overlap" },
+    { lab:"Mean judge",     val:(judge*5).toFixed(1)+"/5", sub:"rubric score" },
+    { lab:"Valid JSON",     val:pct(json),  sub:`${RESULTS.filter(r=>!r.jsonValid).length} malformed` },
+  ];
+  $("#kpis").innerHTML = tiles.map(t =>
+    `<div class="kpi"><div class="lab">${t.lab}</div><div class="val">${t.val}</div><div class="sub">${t.sub}</div></div>`
+  ).join("");
+}
+
+/* --- Bar chart: score by method (sequential, one hue) --- */
+function renderMethods() {
+  const rows = [
+    { k:"Exact match",  v:mean(RESULTS.map(r=>r.exact)) },
+    { k:"Token F1",     v:mean(RESULTS.map(r=>r.f1)) },
+    { k:"LLM judge",    v:mean(RESULTS.map(r=>r.judge)) },
+    { k:"Valid JSON",   v:mean(RESULTS.map(r=>r.jsonValid)) },
+  ];
+  const W=640, rowH=42, padL=110, padR=54, top=8;
+  const H = top + rows.length*rowH + 22;
+  const plot = W - padL - padR;
+  // sequential ramp: more is darker
+  const ramp = ["var(--seq-250)","var(--seq-400)","var(--seq-550)","var(--seq-700)"];
+  const shade = v => ramp[Math.min(ramp.length-1, Math.floor(v * ramp.length))];
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mean score by eval method">`;
+  // gridlines at 0/.25/.5/.75/1
+  for (let i=0;i<=4;i++){
+    const x = padL + plot*(i/4);
+    s += `<line x1="${x}" y1="${top}" x2="${x}" y2="${top+rows.length*rowH}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${x}" y="${H-6}" fill="var(--ink-muted)" font-size="10" text-anchor="middle">${i*25}%</text>`;
+  }
+  rows.forEach((r,i) => {
+    const y = top + i*rowH + 9, h = 20, w = Math.max(2, plot*r.v);
+    s += `<text x="${padL-10}" y="${y+14}" fill="var(--theme-fg)" font-size="12" text-anchor="end">${r.k}</text>`;
+    // 4px rounded data-end, anchored to the baseline
+    s += `<rect class="bar" data-tip="${r.k}: ${(r.v*100).toFixed(1)}%" x="${padL}" y="${y}" width="${w}" height="${h}" rx="4" fill="${shade(r.v)}"/>`;
+    s += `<text x="${padL+w+8}" y="${y+14}" fill="var(--theme-fg)" font-size="11" font-weight="600">${(r.v*100).toFixed(0)}%</text>`;
+  });
+  // baseline
+  s += `<line x1="${padL}" y1="${top}" x2="${padL}" y2="${top+rows.length*rowH}" stroke="var(--axis)" stroke-width="1"/>`;
+  s += `</svg>`;
+  $("#chart-methods").innerHTML = s;
+  $("#chart-methods").querySelectorAll(".bar").forEach(el => bindTip(el, el.dataset.tip));
+}
+
+/* --- Dumbbell: cheap metric vs judge, per case.
+       Hue + SHAPE (circle/square) so identity never rests on colour alone. --- */
+function renderDumbbell() {
+  const W=640, rowH=34, padL=40, padR=70, top=14;
+  const H = top + RESULTS.length*rowH + 24;
+  const plot = W - padL - padR;
+  const x = v => padL + plot*v;
+  // label only the widest gaps — selective, never a number on every point
+  const gaps = RESULTS.map(r => Math.abs(r.judge - r.f1));
+  const cut = [...gaps].sort((a,b)=>b-a)[1];
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Token F1 versus LLM judge score per case">`;
+  for (let i=0;i<=4;i++){
+    const gx = x(i/4);
+    s += `<line x1="${gx}" y1="${top}" x2="${gx}" y2="${top+RESULTS.length*rowH}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text x="${gx}" y="${H-6}" fill="var(--ink-muted)" font-size="10" text-anchor="middle">${(i/4).toFixed(2)}</text>`;
+  }
+  RESULTS.forEach((r,i) => {
+    const y = top + i*rowH + rowH/2;
+    const x1 = x(Math.min(r.f1,r.judge)), x2 = x(Math.max(r.f1,r.judge));
+    s += `<text x="${padL-10}" y="${y+4}" fill="var(--ink-muted)" font-size="11" text-anchor="end">#${r.id}</text>`;
+    s += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--axis)" stroke-width="2"/>`;
+    // 2px surface ring so overlapping marks stay separable
+    s += `<circle class="pt" data-tip="Case #${r.id} — Token F1 ${r.f1.toFixed(2)}" cx="${x(r.f1)}" cy="${y}" r="6" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>`;
+    s += `<rect class="pt" data-tip="Case #${r.id} — Judge ${r.judgeRaw}/5" x="${x(r.judge)-5.5}" y="${y-5.5}" width="11" height="11" rx="2.5" fill="var(--series-2)" stroke="var(--surface-1)" stroke-width="2"/>`;
+    if (Math.abs(r.judge-r.f1) >= cut) {
+      s += `<text x="${x2+10}" y="${y+4}" fill="var(--theme-fg-subtle)" font-size="10">Δ ${(Math.abs(r.judge-r.f1)).toFixed(2)}</text>`;
+    }
+  });
+  s += `<line x1="${padL}" y1="${top}" x2="${padL}" y2="${top+RESULTS.length*rowH}" stroke="var(--axis)" stroke-width="1"/>`;
+  s += `</svg>`;
+  $("#chart-dumbbell").innerHTML = s;
+  $("#chart-dumbbell").querySelectorAll(".pt").forEach(el => bindTip(el, el.dataset.tip));
+}
+
+/* --- Confusion matrix heatmap (sequential, one hue) --- */
+function renderConfusion() {
+  const M = {};
+  LABELS.forEach(g => { M[g] = {}; LABELS.forEach(p => M[g][p] = 0); });
+  RESULTS.forEach(r => { if (M[r.gold] && r.pred in M[r.gold]) M[r.gold][r.pred]++; });
+  const max = Math.max(1, ...LABELS.flatMap(g => LABELS.map(p => M[g][p])));
+  const cell=74, padL=86, padT=30, W=padL+LABELS.length*cell+10, H=padT+LABELS.length*cell+30;
+  const ramp=["var(--seq-100)","var(--seq-250)","var(--seq-400)","var(--seq-550)","var(--seq-700)"];
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Confusion matrix of predicted versus true sentiment">`;
+  LABELS.forEach((p,j) =>
+    s += `<text x="${padL+j*cell+cell/2}" y="${padT-9}" fill="var(--ink-muted)" font-size="11" text-anchor="middle">${p}</text>`);
+  LABELS.forEach((g,i) => {
+    s += `<text x="${padL-10}" y="${padT+i*cell+cell/2+4}" fill="var(--ink-muted)" font-size="11" text-anchor="end">${g}</text>`;
+    LABELS.forEach((p,j) => {
+      const v = M[g][p], t = v/max;
+      const fill = v === 0 ? "var(--surface-1)" : ramp[Math.min(4, Math.round(t*4))];
+      const ink  = t > 0.5 ? "#fff" : "var(--theme-fg)";
+      // 2px gap between cells
+      s += `<rect class="cell" data-tip="true <b>${g}</b> → predicted <b>${p}</b>: ${v} case${v===1?"":"s"}"
+            x="${padL+j*cell+1}" y="${padT+i*cell+1}" width="${cell-2}" height="${cell-2}" rx="6"
+            fill="${fill}" stroke="var(--grid)" stroke-width="1"/>`;
+      s += `<text x="${padL+j*cell+cell/2}" y="${padT+i*cell+cell/2+5}" fill="${v===0?"var(--ink-muted)":ink}"
+            font-size="15" font-weight="700" text-anchor="middle">${v}</text>`;
+    });
+  });
+  s += `<text x="${padL+LABELS.length*cell/2}" y="${H-6}" fill="var(--ink-muted)" font-size="10" text-anchor="middle">predicted →</text>`;
+  s += `</svg>`;
+  $("#chart-confusion").innerHTML = s;
+  $("#chart-confusion").querySelectorAll(".cell").forEach(el => bindTip(el, el.dataset.tip));
+}
+
+/* --- Table view (accessibility + debugging) --- */
+function renderTable() {
+  $("#results-body").innerHTML = RESULTS.map(r => `
+    <tr>
+      <td class="num muted">${r.id}</td>
+      <td>${r.input}
+        <details class="judge"><summary>judge rationale</summary><p>${r.rationale}</p></details>
+      </td>
+      <td class="mono">${r.gold}</td>
+      <td class="mono">${r.pred}</td>
+      <td>${r.exact ? '<span class="chip pass">✔ pass</span>' : '<span class="chip fail">✖ fail</span>'}</td>
+      <td class="num">${r.f1.toFixed(2)}</td>
+      <td class="num">${r.judgeRaw}/5</td>
+      <td>${r.jsonValid ? '<span class="chip pass">✔ valid</span>' : '<span class="chip warn">▲ lenient</span>'}</td>
+    </tr>`).join("");
+}
+
+/* ============================================================
+   5. LIVE MODE — the same suite, scored by a real local model
+   ============================================================ */
+let engine = null;
+async function runLive() {
+  if (!navigator.gpu) {
+    setState("<b>WebGPU unavailable.</b> Open in desktop Chrome/Edge to run live.");
+    return;
+  }
+  const btn = $("#run-live"); btn.disabled = true; $("#run-demo").disabled = true;
+  try {
+    const webllm = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm");
+    const model = $("#model").value;
+    if (!engine || engine._model !== model) {
+      setState("Loading model…");
+      engine = await webllm.CreateMLCEngine(model, {
+        initProgressCallback: r => setState(`Loading model — <b>${Math.round((r.progress||0)*100)}%</b>`),
+      });
+      engine._model = model;
+    }
+    const out = [];
+    for (const c of CASES) {
+      setState(`Scoring case <b>${c.id}</b> of ${CASES.length}…`);
+      // 1) the model under test
+      const gen = await engine.chat.completions.create({
+        temperature: 0,
+        messages: [
+          { role:"system", content:'Reply with ONLY JSON: {"sentiment":"positive|negative|neutral","summary":"one short sentence"}' },
+          { role:"user", content: c.input },
+        ],
+      });
+      const raw = gen?.choices?.[0]?.message?.content?.trim() || "";
+      // 2) the judge — a second call, scoring against ground truth
+      const j = await engine.chat.completions.create({
+        temperature: 0,
+        messages: [
+          { role:"system", content:'You grade an assistant answer 1-5. Reply with ONLY JSON: {"score":N,"reason":"..."}. 5 = correct label and faithful summary; 1 = wrong label and bad summary.' },
+          { role:"user", content:`Message: ${c.input}\nReference: {"sentiment":"${c.gold}","summary":"${c.goldSummary}"}\nAnswer: ${raw}` },
+        ],
+      });
+      let judge = { s:3, r:"(judge did not return valid JSON)" };
+      try {
+        const p = JSON.parse(j?.choices?.[0]?.message?.content?.match(/\{[\s\S]*\}/)?.[0] || "{}");
+        if (p.score) judge = { s: Math.max(1, Math.min(5, +p.score)), r: p.reason || "—" };
+      } catch {}
+      out.push(scoreOne(c, raw, judge));
+    }
+    RESULTS = out; render();
+    setState("Showing <b>live</b> run from your GPU.");
+  } catch (e) {
+    setState(`<b>Live run failed:</b> ${e.message || e}`);
+  } finally {
+    btn.disabled = false; $("#run-demo").disabled = false;
+  }
+}
+
+/* ============================================================
+   6. LANGFUSE-SHAPED TRACE EXPORT
+   ============================================================ */
+function exportTraces() {
+  const trace = {
+    name: "sentiment-eval",
+    timestamp: new Date().toISOString(),
+    metadata: { suite: "support-tickets", cases: RESULTS.length, runtime: "web-llm (browser)" },
+    observations: RESULTS.map(r => ({
+      type: "GENERATION",
+      name: "classify",
+      input: r.input,
+      output: r.raw,
+      scores: [
+        { name:"exact_match", value:r.exact,     dataType:"NUMERIC" },
+        { name:"token_f1",    value:+r.f1.toFixed(4), dataType:"NUMERIC" },
+        { name:"llm_judge",   value:+r.judge.toFixed(4), dataType:"NUMERIC", comment:r.rationale },
+        { name:"json_valid",  value:r.jsonValid, dataType:"NUMERIC" },
+      ],
+    })),
+  };
+  const blob = new Blob([JSON.stringify(trace, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "langfuse-traces.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---- wire up ---- */
+$("#run-demo").addEventListener("click", runDemo);
+$("#run-live").addEventListener("click", runLive);
+$("#export").addEventListener("click", exportTraces);
+addEventListener("resize", () => { if (RESULTS.length) { renderMethods(); renderDumbbell(); renderConfusion(); } });
+runDemo();
+</script>
+</body>
+</html>
