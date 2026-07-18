@@ -84,11 +84,8 @@
     .avatar {
       width: 7rem; height: 7rem; flex-shrink: 0;
       border-radius: 9999px; overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(140deg, var(--theme-accent), var(--theme-accent-muted));
-      color: var(--theme-accent-fg);
-      font-family: "Libre Baskerville", Georgia, serif;
-      font-weight: 700; font-size: 2.25rem; letter-spacing: 1px;
+      object-fit: cover; object-position: 50% 30%;
+      background: var(--theme-bg-subtle);
       box-shadow: 0 0 0 2px var(--theme-border-strong), 0 8px 24px rgba(0,0,0,.12);
     }
     @media (min-width: 640px) { .avatar { width: 8rem; height: 8rem; } }
@@ -172,11 +169,11 @@
       <a class="back" href="/">← Back to the coding agent</a>
 
       <div class="hero">
-        <div class="avatar" aria-hidden="true">VS</div>
+        <img class="avatar" src="/vipul.jpeg" alt="Vipul Srivastava" width="220" height="220" />
         <div>
           <p class="eyebrow">Hi, I'm</p>
           <h1 class="headline">Vipul Srivastava</h1>
-          <p class="sub">Software developer · Montreal, QC</p>
+          <p class="sub">Engineering | PolicyMe</p>
         </div>
       </div>
 
