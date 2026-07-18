@@ -18,7 +18,7 @@
 
   <style>
     :root {
-      --bg: #0f172a;        /* slate navy */
+      --bg: #0b1220;        /* deep slate navy */
       --panel: #111c33;
       --panel-2: #0b1424;
       --text: #e5e7eb;
@@ -32,7 +32,6 @@
     html, body {
       margin: 0;
       height: 100%;
-      background: var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       overflow-x: hidden;
@@ -41,7 +40,11 @@
       display: flex;
       flex-direction: column;
       min-height: 100vh;
-      padding: 14px 16px 10px;
+      padding: 16px 18px 12px;
+      background:
+        radial-gradient(1100px 520px at 82% -8%, rgba(56,189,248,.14), transparent 60%),
+        radial-gradient(900px 480px at 8% 8%, rgba(167,139,250,.12), transparent 55%),
+        var(--bg);
     }
 
     /* Header bar */
@@ -50,10 +53,20 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 10px 18px;
-      padding-bottom: 12px;
+      padding-bottom: 14px;
       border-bottom: 1px solid var(--border);
     }
-    .brand { display: flex; flex-direction: column; line-height: 1.15; }
+    .brand { display: flex; align-items: center; gap: 12px; line-height: 1.15; }
+    .brand .logo {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: 11px;
+      font-family: "Menlo", monospace; font-size: 17px; font-weight: 700;
+      color: #06202e;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      box-shadow: 0 6px 20px rgba(56,189,248,.28);
+    }
+    .brand .brandtext { display: flex; flex-direction: column; }
     .brand .name {
       font-family: "Alfa Slab One", cursive;
       font-size: 20px;
@@ -79,22 +92,60 @@
       padding: 7px 10px;
       font-size: 13px;
       cursor: pointer;
+      transition: border-color .15s ease, transform .1s ease, box-shadow .15s ease;
     }
+    button.ghost { font-weight: 600; }
     select:hover, button.ghost:hover { border-color: var(--accent); }
-    select:disabled { opacity: .55; cursor: not-allowed; }
+    button.ghost:hover { box-shadow: 0 4px 16px rgba(56,189,248,.18); transform: translateY(-1px); }
+    button.ghost:active { transform: translateY(0); }
+    select:disabled, button.ghost:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
 
+    .links { display: flex; align-items: center; }
     .links a {
       color: var(--muted);
       text-decoration: none;
       font-size: 13px;
-      margin-left: 12px;
+      margin-left: 14px;
       border-bottom: 1px dashed transparent;
+      transition: color .15s ease, border-color .15s ease;
     }
     .links a:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
+    /* Notice callout (top of page) */
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin-top: 14px;
+      padding: 12px 15px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(56,189,248,.07), rgba(56,189,248,.02));
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .notice .notice-icon {
+      flex-shrink: 0;
+      font-size: 14px;
+      color: var(--accent);
+      margin-top: 1px;
+    }
+    .notice p { margin: 0; }
+    .notice b { color: var(--text); font-weight: 600; }
+    .notice code {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11.5px;
+      color: var(--accent);
+    }
+
     /* Progress bar */
     .progress-wrap {
-      margin: 10px 0 0;
+      margin: 12px 0 0;
       height: 6px;
       background: var(--panel-2);
       border-radius: 999px;
@@ -111,42 +162,59 @@
     .status-line {
       font-size: 12px;
       color: var(--muted);
-      margin: 6px 2px 0;
+      margin: 8px 2px 0;
       min-height: 16px;
     }
     .status-line b { color: var(--accent); font-weight: 600; }
 
-    /* Terminal */
+    /* Terminal window */
     #terminal-wrap {
       flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
       margin-top: 10px;
-      background: #1e1e1e;
+      background: #1a1a1a;
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
+      border-radius: 12px;
       min-height: 320px;
       overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02) inset;
     }
-    #terminal { width: 100%; height: 100%; }
-
-    footer.caveats {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.5;
+    .term-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      background: #232323;
+      border-bottom: 1px solid #000;
     }
-    footer.caveats b { color: var(--text); }
-    footer.caveats code {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 5px;
+    .term-titlebar .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .term-titlebar .dot.red { background: #ff5f57; }
+    .term-titlebar .dot.yellow { background: #febc2e; }
+    .term-titlebar .dot.green { background: #28c840; }
+    .term-titlebar .term-title {
+      margin-left: 8px;
+      font-family: "Menlo", monospace;
       font-size: 11.5px;
+      color: #8a8a8a;
     }
+    #terminal { flex: 1 1 auto; min-height: 0; width: 100%; padding: 10px 12px; }
+
+    footer.foot {
+      margin-top: 12px;
+      font-size: 11.5px;
+      color: var(--muted);
+      text-align: center;
+      opacity: .85;
+    }
+    footer.foot a { color: var(--accent); text-decoration: none; }
+    footer.foot a:hover { text-decoration: underline; }
 
     @media (max-width: 640px) {
       .brand .name { font-size: 17px; }
+      .brand .logo { width: 34px; height: 34px; font-size: 15px; }
       #terminal-wrap { min-height: 260px; }
+      .notice { font-size: 12px; }
     }
   </style>
 </head>
@@ -154,8 +222,11 @@
 
   <header class="bar">
     <div class="brand">
-      <span class="name"><a href="/home.html" title="About Vipul">Vipul Srivastav</a></span>
-      <span class="tag">an AI coding agent, running entirely in your browser</span>
+      <span class="logo" aria-hidden="true">▸_</span>
+      <span class="brandtext">
+        <span class="name"><a href="/home.html" title="About Vipul">Vipul Srivastav</a></span>
+        <span class="tag">an AI coding agent, running entirely in your browser</span>
+      </span>
     </div>
     <div class="spacer"></div>
     <div class="controls">
@@ -173,15 +244,28 @@
     </div>
   </header>
 
+  <div class="notice" role="note">
+    <span class="notice-icon" aria-hidden="true">ⓘ</span>
+    <p>
+      <b>Heads up:</b> requires a <b>WebGPU</b>-capable browser (desktop Chrome or Edge work best; Safari&nbsp;17+/Firefox partial) with hardware acceleration on.
+      The <b>first</b> load downloads the model weights (~0.7–1&nbsp;GB) into your browser cache — after that it starts fast and the model reasons offline on your own GPU.
+      It's a tiny model, so edits aren't always perfect. Try <code>help</code>, <code>ls</code>, <code>cat index.js</code>, or ask it to <code>add a sum function to index.js</code>.
+    </p>
+  </div>
+
   <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
   <div class="status-line" id="status">WebGPU model runs 100% locally. Pick a model and press <b>Start engine</b> — or just type <b>help</b> below.</div>
 
-  <div id="terminal-wrap"><div id="terminal"></div></div>
+  <div id="terminal-wrap">
+    <div class="term-titlebar" aria-hidden="true">
+      <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+      <span class="term-title">credo92-agent — web-llm</span>
+    </div>
+    <div id="terminal"></div>
+  </div>
 
-  <footer class="caveats">
-    <b>Heads up:</b> requires a <b>WebGPU</b>-capable browser (desktop Chrome or Edge work best; Safari&nbsp;17+/Firefox partial) with hardware acceleration on.
-    The <b>first</b> load downloads the model weights (~0.7–1&nbsp;GB) into your browser cache — after that it starts fast and the model reasons offline on your own GPU.
-    It's a tiny model, so edits aren't always perfect. Try <code>help</code>, <code>ls</code>, <code>cat index.js</code>, or ask it to <code>add a sum function to index.js</code>.
+  <footer class="foot">
+    Runs 100% in your browser — no server, no API keys. <a href="/home.html">About Vipul &amp; more projects →</a>
   </footer>
 
   <script type="module">

@@ -39,7 +39,10 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
-      background: var(--theme-bg);
+      background:
+        radial-gradient(900px 460px at 82% -6%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 60%),
+        radial-gradient(760px 420px at 6% 4%, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 55%),
+        var(--theme-bg);
       color: var(--theme-fg);
       font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
