@@ -136,6 +136,27 @@
     ul.stack .title { font-size: .875rem; font-weight: 600; line-height: 1.35; }
     ul.stack .desc { font-size: .75rem; line-height: 1.6; color: var(--theme-fg-subtle); margin-top: .1rem; }
 
+    /* Project cards */
+    .projects { display: grid; gap: .75rem; }
+    .project {
+      display: block; text-decoration: none; color: inherit;
+      padding: 1rem 1.1rem; border-radius: .75rem;
+      background: var(--theme-bg-subtle);
+      border: 1px solid var(--theme-border);
+      transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+    }
+    .project:hover { transform: translateY(-2px); border-color: var(--theme-accent); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+    .project .head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+    .project .name { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+    .project .arrow { color: var(--theme-accent); font-weight: 700; }
+    .project .meta { font-size: .6875rem; color: var(--theme-fg-subtle); font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .project .desc { font-size: .8125rem; line-height: 1.6; color: var(--theme-fg-muted); margin-top: .4rem; }
+    .project .tags { margin-top: .55rem; display: flex; flex-wrap: wrap; gap: .3rem; }
+    .project .tag {
+      font-size: .625rem; letter-spacing: .02em; color: var(--theme-fg-subtle);
+      padding: .12rem .45rem; border: 1px solid var(--theme-border); border-radius: 9999px;
+    }
+
     .langs { display: flex; flex-wrap: wrap; gap: .5rem .75rem; }
     .langs .lang {
       font-size: .8125rem; color: var(--theme-fg-muted);
@@ -158,7 +179,7 @@
 <body>
   <div class="page">
     <main>
-      <a class="back" href="https://main.da31r6gnfrzkn.amplifyapp.com" target="_blank" rel="noopener">← Back to today's news</a>
+      <a class="back" href="https://newsflowhq.com" target="_blank" rel="noopener">← Back to today's news</a>
 
       <div class="hero">
         <div class="avatar" aria-hidden="true">VS</div>
@@ -194,7 +215,36 @@
       </div>
 
       <section>
-        <h2>Built with</h2>
+        <h2>Things I've built</h2>
+        <div class="projects">
+          <a class="project" href="https://newsflowhq.com" target="_blank" rel="noopener">
+            <div class="head"><span class="name">📰 NewsFlow</span> <span class="arrow">↗</span> <span class="meta">newsflowhq.com</span></div>
+            <div class="desc">AI-narrated news podcasts you can hear in 5 minutes. It turns the day's top headlines into a personalized audio briefing with synced subtitles — pick your country, categories, and language, then listen on the site or get it delivered by email. Free for everyone, no account needed.</div>
+            <div class="tags"><span class="tag">Next.js</span><span class="tag">AWS Amplify</span><span class="tag">Neural TTS</span><span class="tag">7 languages</span></div>
+          </a>
+
+          <a class="project" href="https://main.d30wiezbcac42k.amplifyapp.com/" target="_blank" rel="noopener">
+            <div class="head"><span class="name">🏦 LoanReady</span> <span class="arrow">↗</span> <span class="meta">amplifyapp.com</span></div>
+            <div class="desc">Know exactly what your loan will cost you. LoanReady takes opaque loan terms — interest rates, fees, and repayment schedules — and turns them into a clear, upfront picture of what you'll actually pay, so you can compare offers before you commit.</div>
+            <div class="tags"><span class="tag">loan calculator</span><span class="tag">cost transparency</span></div>
+          </a>
+
+          <a class="project" href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener">
+            <div class="head"><span class="name">💬 vllm-chatgpt</span> <span class="arrow">↗</span> <span class="meta">github.com/credo92</span></div>
+            <div class="desc">A naive GPT implementation, built to understand all the fundamentals. A full-stack chat app (FastAPI + React) with RAG over uploaded PDFs, web browsing, MCP tool integration, and token-aware sliding-window context — served by Ollama or vLLM over PostgreSQL + pgvector.</div>
+            <div class="tags"><span class="tag">FastAPI</span><span class="tag">React</span><span class="tag">RAG</span><span class="tag">vLLM / Ollama</span><span class="tag">pgvector</span><span class="tag">MCP</span></div>
+          </a>
+
+          <a class="project" href="https://github.com/credo92/vllm-model-distillation" target="_blank" rel="noopener">
+            <div class="head"><span class="name">🧪 vllm-model-distillation</span> <span class="arrow">↗</span> <span class="meta">github.com/credo92</span></div>
+            <div class="desc">An app for model distillation, built to understand what it's about. A playground that runs prompts through a teacher and a student model side-by-side via vLLM, stores every prompt–response pair, and exports them as structured datasets for training smaller, cheaper student models.</div>
+            <div class="tags"><span class="tag">FastAPI</span><span class="tag">React</span><span class="tag">vLLM</span><span class="tag">knowledge distillation</span><span class="tag">PostgreSQL</span></div>
+          </a>
+        </div>
+      </section>
+
+      <section>
+        <h2>How NewsFlow is built</h2>
         <ul class="stack">
           <li><span class="emoji">⚛️</span><div><div class="title">Next.js · React · TypeScript · Tailwind</div><div class="desc">Frontend framework, components, and styles.</div></div></li>
           <li><span class="emoji">☁️</span><div><div class="title">AWS Amplify + DynamoDB</div><div class="desc">Hosting for the website and storage for subscriber records.</div></div></li>
@@ -224,7 +274,7 @@
     <footer>
       NewsFlow is free for everyone. No accounts required to listen.<br />
       © 2026 NewsFlow <span class="sep">·</span> AI-narrated news in your language <span class="sep">·</span>
-      <a href="https://main.da31r6gnfrzkn.amplifyapp.com" target="_blank" rel="noopener">Open NewsFlow</a>
+      <a href="https://newsflowhq.com" target="_blank" rel="noopener">Open NewsFlow</a>
     </footer>
   </div>
 </body>
