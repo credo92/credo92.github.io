@@ -1,11 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vipul Srivastav — In-Browser AI Coding Agent</title>
+  <title>Vipul Srivastava — In-Browser AI Coding Agent</title>
   <meta name="description" content="A Claude Code-style coding agent running 100% in your browser via WebGPU. No servers, no API keys — a tiny open-source model edits a virtual project live." />
   <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Vipul Srivastava — In-Browser AI Coding Agent" />
+  <meta property="og:description" content="A Claude Code-style coding agent running 100% in your browser via WebGPU — no servers, no API keys. A tiny open-source model edits a virtual project live." />
+  <meta property="og:url" content="https://credo92.github.io/" />
+  <meta property="og:image" content="https://credo92.github.io/assets/screens/rag.png" />
+  <meta name="twitter:card" content="summary_large_image" />
 
   <!-- Xterm.js terminal UI -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
@@ -18,15 +24,16 @@
 
   <style>
     :root {
-      --bg: #0b1220;        /* deep slate navy */
-      --panel: #111c33;
-      --panel-2: #0b1424;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --accent: #38bdf8;    /* sky blue */
-      --accent-2: #a78bfa;
-      --border: #1e2a44;
-      --ok: #34d399;
+      color-scheme: light;
+      --bg: #f7f7f5;        /* warm white page */
+      --panel: #ffffff;
+      --panel-2: #eef0ee;
+      --text: #1f2933;
+      --muted: #64748b;
+      --accent: #2a6db0;    /* deeper sky blue for light bg */
+      --accent-2: #7c5cd6;  /* violet */
+      --border: #e2e2e2;
+      --ok: #0a7d33;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -173,20 +180,20 @@
       display: flex;
       flex-direction: column;
       margin-top: 10px;
-      background: #1a1a1a;
+      background: #fbfbfa;
       border: 1px solid var(--border);
       border-radius: 12px;
       min-height: 320px;
       overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02) inset;
+      box-shadow: 0 18px 50px rgba(15,23,42,.12), 0 1px 0 rgba(255,255,255,.6) inset;
     }
     .term-titlebar {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 9px 13px;
-      background: #232323;
-      border-bottom: 1px solid #000;
+      background: #f0f1ef;
+      border-bottom: 1px solid var(--border);
     }
     .term-titlebar .dot { width: 12px; height: 12px; border-radius: 50%; }
     .term-titlebar .dot.red { background: #ff5f57; }
@@ -196,7 +203,7 @@
       margin-left: 8px;
       font-family: "Menlo", monospace;
       font-size: 11.5px;
-      color: #8a8a8a;
+      color: var(--muted);
     }
     #terminal { flex: 1 1 auto; min-height: 0; width: 100%; padding: 10px 12px; }
 
@@ -224,7 +231,7 @@
     <div class="brand">
       <span class="logo" aria-hidden="true">▸_</span>
       <span class="brandtext">
-        <span class="name"><a href="/home.html" title="About Vipul">Vipul Srivastav</a></span>
+        <span class="name"><a href="/home.html" title="About Vipul">Vipul Srivastava</a></span>
         <span class="tag">an AI coding agent, running entirely in your browser</span>
       </span>
     </div>
@@ -280,10 +287,15 @@
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize: 13,
       theme: {
-        background: '#1e1e1e',
-        foreground: '#e5e7eb',
-        cursor: '#38bdf8',
-        selectionBackground: '#264f78',
+        background: '#fbfbfa',
+        foreground: '#1f2933',
+        cursor: '#2a6db0',
+        selectionBackground: '#cfe3f5',
+        // ANSI palette re-tuned for a light background
+        black: '#1f2933',   red: '#c0392b',   green: '#0a7d33',   yellow: '#b7791f',
+        blue: '#2a6db0',    magenta: '#8e44ad', cyan: '#1f7a8c',  white: '#5b6b7a',
+        brightBlack: '#7a8899', brightRed: '#e05a4b', brightGreen: '#12a150', brightYellow: '#d69e2e',
+        brightBlue: '#3987e5',  brightMagenta: '#a569bd', brightCyan: '#2596be', brightWhite: '#324a5e',
       },
     });
     const fit = new FitAddon.FitAddon();

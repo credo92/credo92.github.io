@@ -1,16 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
   <title>About Vipul Srivastava — Software Developer</title>
   <meta name="description" content="Vipul Srivastava — a Montreal software developer building products end-to-end, from NewsFlow and LoanReady to experiments with local LLMs." />
   <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content="Vipul Srivastava — Software Developer" />
+  <meta property="og:description" content="A Montreal software developer building products end-to-end — from NewsFlow and LoanReady to in-browser LLM playgrounds for RAG, evals, and distillation." />
+  <meta property="og:url" content="https://credo92.github.io/home.html" />
+  <meta property="og:image" content="https://credo92.github.io/assets/screens/rag.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
   <style>
     :root {
+      color-scheme: light;
       --theme-bg: #fff;
       --theme-bg-subtle: #f7f7f5;
       --theme-fg: #121212;
@@ -23,7 +30,7 @@
       --theme-border-strong: #ccc;
     }
     @media (prefers-color-scheme: dark) {
-      :root {
+      :root:not([data-theme="light"]) {
         --theme-bg: #121212;
         --theme-bg-subtle: #1b1b1b;
         --theme-fg: #f4f4f2;
@@ -145,6 +152,26 @@
     .project .arrow { color: var(--theme-accent); font-weight: 700; }
     .project .meta { font-size: .6875rem; color: var(--theme-fg-subtle); font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
     .project .desc { font-size: .8125rem; line-height: 1.6; color: var(--theme-fg-muted); margin-top: .4rem; }
+    .project.static { cursor: default; }
+    .project.static:hover { transform: none; box-shadow: none; border-color: var(--theme-border); }
+    .project .title-link { text-decoration: none; color: inherit; }
+    .project .title-link:hover .name { color: var(--theme-accent); }
+    .project .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; }
+    .project .actions a {
+      display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600;
+      text-decoration: none; padding: .35rem .75rem; border-radius: 9999px; border: 1px solid var(--theme-border);
+      color: var(--theme-fg); transition: border-color .12s ease, background .12s ease, transform .12s ease;
+    }
+    .project .actions a svg { width: .8rem; height: .8rem; }
+    .project .actions a.demo { background: var(--theme-accent); color: var(--theme-accent-fg); border-color: var(--theme-accent); }
+    .project .actions a.demo:hover { transform: translateY(-1px); }
+    .project .actions a.src:hover { border-color: var(--theme-accent); }
+    .badge-live {
+      display: inline-flex; align-items: center; gap: .3rem; font-size: .6rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 9999px;
+      color: #0ca30c; background: color-mix(in srgb, #0ca30c 13%, transparent);
+    }
+    .badge-live .pulse { width: .4rem; height: .4rem; border-radius: 50%; background: #0ca30c; }
     .project .tags { margin-top: .55rem; display: flex; flex-wrap: wrap; gap: .3rem; }
     .project .tag {
       font-size: .625rem; letter-spacing: .02em; color: var(--theme-fg-subtle);
@@ -228,17 +255,25 @@
             <div class="tags"><span class="tag">loan calculator</span><span class="tag">cost transparency</span></div>
           </a>
 
-          <a class="project" href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener">
-            <div class="head"><span class="name">💬 vllm-chatgpt</span> <span class="arrow">↗</span> <span class="meta">github.com/credo92</span></div>
-            <div class="desc">A naive GPT implementation, built to understand all the fundamentals. A full-stack chat app (FastAPI + React) with RAG over uploaded PDFs, web browsing, MCP tool integration, and token-aware sliding-window context — served by Ollama or vLLM over PostgreSQL + pgvector.</div>
+          <div class="project static">
+            <div class="head"><a class="title-link" href="/rag.html"><span class="name">💬 vllm-chatgpt</span></a> <span class="badge-live"><span class="pulse"></span>Live demo</span></div>
+            <div class="desc">A naive GPT implementation, built to understand all the fundamentals. A full-stack chat app (FastAPI + React) with RAG over uploaded PDFs, web browsing, MCP tool integration, and token-aware sliding-window context — served by Ollama or vLLM over PostgreSQL + pgvector. I ported the core to a page that runs it all in your browser.</div>
+            <div class="actions">
+              <a class="demo" href="/rag.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Open RAG playground</a>
+              <a class="src" href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.32.47-2.39 1.24-3.23-.12-.31-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.24 2.87.12 3.18.77.84 1.23 1.91 1.23 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.82 1.1.82 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"/></svg>Source</a>
+            </div>
             <div class="tags"><span class="tag">FastAPI</span><span class="tag">React</span><span class="tag">RAG</span><span class="tag">vLLM / Ollama</span><span class="tag">pgvector</span><span class="tag">MCP</span></div>
-          </a>
+          </div>
 
-          <a class="project" href="https://github.com/credo92/vllm-model-distillation" target="_blank" rel="noopener">
-            <div class="head"><span class="name">🧪 vllm-model-distillation</span> <span class="arrow">↗</span> <span class="meta">github.com/credo92</span></div>
-            <div class="desc">An app for model distillation, built to understand what it's about. A playground that runs prompts through a teacher and a student model side-by-side via vLLM, stores every prompt–response pair, and exports them as structured datasets for training smaller, cheaper student models.</div>
+          <div class="project static">
+            <div class="head"><a class="title-link" href="/distill.html"><span class="name">🧪 vllm-model-distillation</span></a> <span class="badge-live"><span class="pulse"></span>Live demo</span></div>
+            <div class="desc">An app for model distillation, built to understand what it's about. A playground that runs prompts through a teacher and a student model side-by-side via vLLM, stores every prompt–response pair, and exports them as structured datasets for training smaller, cheaper student models. The in-browser port runs both models on WebGPU.</div>
+            <div class="actions">
+              <a class="demo" href="/distill.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Open distillation playground</a>
+              <a class="src" href="https://github.com/credo92/vllm-model-distillation" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.32.47-2.39 1.24-3.23-.12-.31-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.24 2.87.12 3.18.77.84 1.23 1.91 1.23 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.82 1.1.82 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"/></svg>Source</a>
+            </div>
             <div class="tags"><span class="tag">FastAPI</span><span class="tag">React</span><span class="tag">vLLM</span><span class="tag">knowledge distillation</span><span class="tag">PostgreSQL</span></div>
-          </a>
+          </div>
         </div>
       </section>
     </main>
