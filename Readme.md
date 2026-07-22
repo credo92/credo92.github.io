@@ -13,6 +13,7 @@ your GPU via WebGPU. Deployed with GitHub Pages.
 | [`/rag.html`](https://credo92.github.io/rag.html) | A from-scratch **RAG pipeline**, every step drawn on screen. |
 | [`/distill.html`](https://credo92.github.io/distill.html) | **Model distillation**, teacher vs student, side by side. |
 | [`/evals.html`](https://credo92.github.io/evals.html) | What an **LLM eval** is, with charts you can read. |
+| [`/modalities.html`](https://credo92.github.io/modalities.html) | **Speech, vision & search** on the CPU — Whisper, CLIP, embeddings (no GPU). |
 
 ---
 
@@ -52,6 +53,25 @@ ported so a teacher and a student answer the same prompt **side by side** on you
 - a recorded **demo mode** so the charts render with no download
 
 ---
+
+## 🎛️ Modalities — [`modalities.html`](https://credo92.github.io/modalities.html)
+
+The one set of demos that needs **no GPU**. transformers.js (ONNX Runtime Web) runs real models on the
+CPU via WebAssembly, so these work in any modern browser:
+
+![Modalities playground](assets/screens/modalities.png)
+
+- **Speech → text** — `Xenova/whisper-tiny.en` transcribes the sample clip, an uploaded file, or your
+  mic; audio is decoded to 16 kHz mono in-browser and never leaves the tab.
+- **Image ↔ text** — `Xenova/clip-vit-base-patch32` zero-shot: rank an image against editable candidate
+  labels (upload your own or use the samples).
+- **Semantic search** — `Xenova/all-MiniLM-L6-v2` embeds a small corpus; queries are ranked by cosine
+  similarity. The retrieval half of the RAG page, standalone.
+
+The agent's model picker is also populated dynamically from `prebuiltAppConfig.model_list` — curated,
+grouped, size-labeled (from `vram_required_MB`), and drift-proof (IDs missing from the current web-llm
+build are skipped). Reasoning models (Qwen3) render their `<think>` trace via a `think` command, and
+function-calling models (Hermes) drive a native `tool_calls` loop over the virtual filesystem.
 
 ## Notes
 

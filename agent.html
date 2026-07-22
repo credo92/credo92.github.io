@@ -238,10 +238,7 @@
     <div class="spacer"></div>
     <div class="controls">
       <label for="model">Model</label>
-      <select id="model" title="Local model (runs on your GPU)">
-        <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B (best for code)</option>
-        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (lightest)</option>
-      </select>
+      <select id="model" title="Local model (runs on your GPU) — grouped by size &amp; capability"></select>
       <button class="ghost" id="load-btn" title="Download & start the selected model">▸ Start engine</button>
     </div>
     <div class="links">
@@ -249,6 +246,7 @@
       <a href="/rag.html">RAG</a>
       <a href="/distill.html">Distill</a>
       <a href="/evals.html">Evals</a>
+      <a href="/modalities.html">Modalities</a>
       <a href="https://github.com/credo92" target="_blank" rel="noopener">@credo92</a>
       <a href="https://github.com/vsrivastav-pm" target="_blank" rel="noopener">@vsrivastav-pm</a>
     </div>
@@ -342,6 +340,7 @@
     });
     let virtualFS = seedFS();
     let lastDiff = null; // { file, before, after }
+    let lastThought = null; // last <think> reasoning captured (Qwen3 et al.)
 
     // ---- Engine state ---------------------------------------------------
     const engines = {}; // model_id -> engine (cache)
@@ -354,6 +353,64 @@
     const progBar = document.getElementById('progress-bar');
 
     const webgpuOK = !!navigator.gpu;
+
+    // ---- Model picker ---------------------------------------------------
+    // Curated allowlist, grouped by size/capability. IDs are resolved against what this
+    // WebLLM build actually ships (populateModels skips any that are missing), so the list
+    // never 404s as web-llm versions drift. Sizes come free from vram_required_MB.
+    const MODEL_GROUPS = [
+      { label: "Tiny / fast first-load", ids: [
+        ["SmolLM2-360M-Instruct-q4f16_1-MLC", "SmolLM2-360M"],
+        ["TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC", "TinyLlama-1.1B"],
+        ["Llama-3.2-1B-Instruct-q4f16_1-MLC", "Llama-3.2-1B"],
+      ]},
+      { label: "Best for code / agent", ids: [
+        ["Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", "Qwen2.5-Coder-1.5B", { default: true }],
+        ["gemma-2-2b-it-q4f16_1-MLC", "Gemma-2-2B"],
+        ["Llama-3.2-3B-Instruct-q4f16_1-MLC", "Llama-3.2-3B"],
+        ["Phi-3.5-mini-instruct-q4f16_1-MLC", "Phi-3.5-mini"],
+      ]},
+      { label: "Reasoning — renders <think>", ids: [
+        ["Qwen3-0.6B-q4f16_1-MLC", "Qwen3-0.6B", { think: true }],
+        ["Qwen3-4B-q4f16_1-MLC", "Qwen3-4B", { think: true }],
+      ]},
+      { label: "Function calling — native tools", ids: [
+        ["Hermes-2-Pro-Mistral-7B-q4f16_1-MLC", "Hermes-2-Pro-Mistral-7B", { tools: true }],
+        ["Hermes-3-Llama-3.1-8B-q4f16_1-MLC", "Hermes-3-8B", { tools: true }],
+      ]},
+    ];
+
+    const sizeLabel = (mb) => !mb || mb <= 0 ? "" : (mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : Math.round(mb) + " MB");
+
+    function populateModels() {
+      const records = new Map((webllm.prebuiltAppConfig?.model_list || []).map(m => [m.model_id, m]));
+      modelSelect.innerHTML = "";
+      let defaultOpt = null;
+      for (const group of MODEL_GROUPS) {
+        const og = document.createElement("optgroup");
+        og.label = group.label;
+        for (const [modelId, name, flags = {}] of group.ids) {
+          const rec = records.get(modelId);
+          if (!rec) continue; // skip anything this web-llm build doesn't ship
+          const opt = document.createElement("option");
+          opt.value = modelId;
+          const sz = sizeLabel(rec.vram_required_MB);
+          opt.textContent = sz ? `${name} · ${sz}` : name;
+          if (flags.think) opt.dataset.think = "1";
+          if (flags.tools) opt.dataset.tools = "1";
+          og.appendChild(opt);
+          if (flags.default) defaultOpt = opt;
+        }
+        if (og.children.length) modelSelect.appendChild(og);
+      }
+      if (defaultOpt) defaultOpt.selected = true;
+    }
+
+    // Capability flags for the currently selected option.
+    function currentModelFlags() {
+      const opt = modelSelect.options[modelSelect.selectedIndex];
+      return { think: opt?.dataset.think === "1", tools: opt?.dataset.tools === "1" };
+    }
 
     // Resolve a requested model id against what this WebLLM build actually ships.
     function resolveModelId(wanted) {
@@ -470,6 +527,7 @@
           writeln(`  ${C.cyan}ls${C.reset}                list files in the virtual project`);
           writeln(`  ${C.cyan}cat <file>${C.reset}        print a file`);
           writeln(`  ${C.cyan}git diff${C.reset}          show the agent's last change`);
+          writeln(`  ${C.cyan}think${C.reset}             show a reasoning model's last <think> trace`);
           writeln(`  ${C.cyan}reset${C.reset}             restore the starting project`);
           writeln(`  ${C.cyan}clear${C.reset}             clear the screen`);
           writeln("");
@@ -493,6 +551,10 @@
             return true;
           }
           writeln(`${C.yellow}only 'git diff' is supported here.${C.reset}`);
+          return true;
+        case "think":
+          if (!lastThought) { writeln(`${C.gray}no reasoning captured yet — pick a ${C.reset}${C.cyan}Reasoning${C.reset}${C.gray} model (Qwen3) and ask it something.${C.reset}`); return true; }
+          writeln(`${C.gray}${lastThought.split("\n").join("\n")}${C.reset}`);
           return true;
         case "reset":
           virtualFS = seedFS(); lastDiff = null;
@@ -539,6 +601,79 @@
       return out;
     }
 
+    // ---- Reasoning models: pull <think>…</think> out of the reply -------
+    function stripThinking(text) {
+      let out = text;
+      const closed = out.match(/<think>([\s\S]*?)<\/think>/i);
+      if (closed) {
+        lastThought = closed[1].trim();
+        out = out.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
+        if (lastThought) writeln(`${C.gray}∴ reasoned for ~${lastThought.length} chars — type ${C.reset}${C.cyan}think${C.reset}${C.gray} to show the reasoning${C.reset}`);
+      } else if (/<think>/i.test(out)) {
+        // truncated / unclosed <think> — treat the remainder as reasoning
+        const idx = out.search(/<think>/i);
+        lastThought = out.slice(idx + 7).trim();
+        out = out.slice(0, idx).trim();
+        if (lastThought) writeln(`${C.gray}∴ reasoning captured — type ${C.reset}${C.cyan}think${C.reset}${C.gray} to show it${C.reset}`);
+      }
+      return out;
+    }
+
+    // ---- Function-calling models: real tool loop over the virtual FS ----
+    const NATIVE_TOOLS = [
+      { type: "function", function: { name: "list_files", description: "List the files in the project.", parameters: { type: "object", properties: {} } } },
+      { type: "function", function: { name: "read_file", description: "Read the full contents of a file.", parameters: { type: "object", required: ["file"], properties: { file: { type: "string", description: "File name, e.g. index.js" } } } } },
+      { type: "function", function: { name: "write_file", description: "Overwrite a file with its full new contents (creates it if missing).", parameters: { type: "object", required: ["file", "content"], properties: { file: { type: "string" }, content: { type: "string", description: "The complete new file contents." } } } } },
+    ];
+    function runNativeTool(name, args) {
+      if (name === "list_files") return { files: fileList() };
+      if (name === "read_file") {
+        const f = args.file;
+        return (f in virtualFS) ? { file: f, content: virtualFS[f] } : { error: `no such file: ${f}` };
+      }
+      if (name === "write_file") {
+        const f = args.file, after = args.content ?? "";
+        if (!f) return { error: "missing 'file'" };
+        const before = (f in virtualFS) ? virtualFS[f] : "";
+        writeln("");
+        writeln(`${C.blue}∴ editing ${f}${f in virtualFS ? "" : " (new file)"}${C.reset}`);
+        renderDiff(f, before, after);
+        virtualFS[f] = after; lastDiff = { file: f, before, after };
+        writeln(`${C.green}✔ ${f} updated${C.reset} ${C.gray}(run 'cat ${f}' or 'git diff' to inspect)${C.reset}`);
+        return { ok: true, file: f };
+      }
+      return { error: `unknown tool ${name}` };
+    }
+    async function runNativeToolLoop(userPrompt) {
+      const messages = [
+        { role: "system", content: "You are a terminal coding agent working in a small virtual project. Use the tools to inspect and edit files: call list_files/read_file to understand the project, then write_file with the FULL new contents to make a change. When finished, reply with a one-sentence summary and no further tool calls." },
+        { role: "user", content: userPrompt },
+      ];
+      const MAX_ROUNDS = 8;
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        const reply = await engine.chat.completions.create({ messages, tools: NATIVE_TOOLS, tool_choice: "auto", temperature: 0.2 });
+        const msg = reply?.choices?.[0]?.message || {};
+        const calls = msg.tool_calls || [];
+        if (!calls.length) {
+          const content = (msg.content || "").trim();
+          if (content) writeln(`${C.gray}${content}${C.reset}`);
+          else writeln(`${C.gray}(done)${C.reset}`);
+          return;
+        }
+        messages.push({ role: "assistant", content: msg.content || "", tool_calls: calls });
+        for (const tc of calls) {
+          const fn = tc.function || {};
+          let args = {};
+          try { args = typeof fn.arguments === "string" ? JSON.parse(fn.arguments || "{}") : (fn.arguments || {}); } catch { args = {}; }
+          const shown = fn.name === "write_file" ? `{file:"${args.file || "?"}"}` : (Object.keys(args).length ? JSON.stringify(args).slice(0, 60) : "");
+          writeln(`${C.mag}∴ ${fn.name}(${shown})${C.reset}`);
+          const result = runNativeTool(fn.name, args);
+          messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
+        }
+      }
+      writeln(`${C.yellow}stopped — hit the tool-round limit.${C.reset}`);
+    }
+
     async function runAgentLoop(userPrompt) {
       if (!webgpuOK) {
         writeln(`${C.yellow}The AI engine needs WebGPU. Try ${C.reset}${C.cyan}ls${C.reset}${C.yellow} / ${C.reset}${C.cyan}cat index.js${C.reset}${C.yellow}, or open in desktop Chrome/Edge.${C.reset}`);
@@ -551,14 +686,23 @@
       }
 
       busy = true;
-      writeln(`${C.mag}∴ thinking…${C.reset}`);
       try {
+        // Function-calling models drive a real native tool loop instead of the text protocol.
+        if (currentModelFlags().tools) {
+          writeln(`${C.mag}∴ thinking (native tools)…${C.reset}`);
+          await runNativeToolLoop(userPrompt);
+          return;
+        }
+
+        writeln(`${C.mag}∴ thinking…${C.reset}`);
         const messages = [
           { role: "system", content: buildSystemPrompt() },
           { role: "user", content: userPrompt },
         ];
         const reply = await engine.chat.completions.create({ messages, temperature: 0.2 });
-        const text = reply?.choices?.[0]?.message?.content || "";
+        // Reasoning models (Qwen3…) emit <think>…</think> first — pull it out so it never
+        // confuses <write_file> parsing, and surface it via the 'think' builtin.
+        const text = stripThinking(reply?.choices?.[0]?.message?.content || "");
 
         const writes = extractWrites(text);
         // Show any explanation text (everything outside the write_file blocks)
@@ -653,6 +797,7 @@
       }
     });
 
+    populateModels();
     banner();
     term.focus();
   </script>

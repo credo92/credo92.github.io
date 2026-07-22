@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Modalities in your browser — speech, vision & search on the CPU</title>
+  <meta name="description" content="Whisper speech-to-text, CLIP zero-shot image understanding, and semantic search — all running fully in your browser on the CPU via transformers.js (ONNX Runtime Web). No server, no GPU required." />
+  <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Modalities in your browser — speech, vision & search" />
+  <meta property="og:description" content="Whisper (speech→text), CLIP (image↔text), and semantic search running fully in-browser on the CPU via transformers.js. No server, no GPU required." />
+  <meta property="og:url" content="https://credo92.github.io/modalities.html" />
+  <meta property="og:image" content="https://credo92.github.io/assets/screens/modalities.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: light;
+      --theme-bg: #fff; --theme-bg-subtle: #f7f7f5;
+      --theme-fg: #121212; --theme-fg-muted: #333; --theme-fg-subtle: #666;
+      --theme-accent: #326891; --theme-accent-fg: #fff;
+      --theme-border: #e2e2e2; --theme-border-strong: #ccc;
+      --surface-1: #f7f7f5;
+      --series-1: #2a78d6; --series-2: #008300;
+      --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab; --seq-700: #0d366b;
+      --status-good: #0ca30c; --status-critical: #d03b3b; --status-warning: #fab219;
+      --grid: #e1e0d9; --axis: #c3c2b7; --ink-muted: #898781;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+        --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+        --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+        --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+        --surface-1: #1b1b1b; --series-1: #3987e5;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(900px 460px at 84% -6%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 60%), var(--theme-bg);
+      color: var(--theme-fg);
+      font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; line-height: 1.55; min-height: 100vh;
+    }
+    .headline { font-family: "Libre Baskerville", Georgia, serif; }
+    a { color: inherit; }
+
+    /* Shared top nav */
+    .topnav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 1.1rem; background: color-mix(in srgb, var(--theme-bg) 80%, transparent); backdrop-filter: saturate(140%) blur(10px); -webkit-backdrop-filter: saturate(140%) blur(10px); border-bottom: 1px solid var(--theme-border); }
+    .topnav .brand { display: inline-flex; align-items: center; gap: .5rem; font-family: "Libre Baskerville", Georgia, serif; font-weight: 700; font-size: .95rem; text-decoration: none; color: var(--theme-fg); white-space: nowrap; }
+    .topnav .brand .mark { display: inline-flex; align-items: center; justify-content: center; width: 1.55rem; height: 1.55rem; border-radius: 7px; flex-shrink: 0; font-family: ui-monospace, Menlo, monospace; font-size: .8rem; font-weight: 700; color: #fff; background: linear-gradient(140deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 55%, #000)); }
+    .topnav nav { display: flex; gap: .12rem; flex-wrap: wrap; justify-content: flex-end; }
+    .topnav nav a { font-size: .8rem; font-weight: 500; text-decoration: none; color: var(--theme-fg-subtle); padding: .35rem .6rem; border-radius: .5rem; transition: color .12s ease, background .12s ease; }
+    .topnav nav a:hover { color: var(--theme-fg); background: var(--theme-bg-subtle); }
+    .topnav nav a.active { color: var(--theme-accent); font-weight: 600; }
+    @media (max-width: 620px) { .topnav { flex-direction: column; align-items: flex-start; gap: .4rem; } .topnav nav { justify-content: flex-start; } }
+
+    main { width: 100%; max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    @media (min-width: 640px) { main { padding: 3.5rem 1.5rem 5rem; } }
+    h1 { font-size: 2rem; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; margin: 0 0 .6rem; }
+    @media (min-width: 640px) { h1 { font-size: 2.5rem; } }
+    .dek { font-size: 1.05rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 48rem; }
+    code { background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: 4px; padding: .05rem .32rem; font-size: .82em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-accent); }
+
+    /* CPU status banner (green — these run without a GPU) */
+    .cpu-status { display:flex; gap:.9rem; align-items:center; margin:1.1rem 0 0; padding:.85rem 1.05rem; border-radius:.8rem; border:1px solid color-mix(in srgb, var(--status-good) 38%, var(--theme-border)); background: linear-gradient(180deg, color-mix(in srgb, var(--status-good) 8%, transparent), transparent); }
+    .cpu-status .ic { width:2.4rem; height:2.4rem; flex-shrink:0; border-radius:.6rem; display:flex; align-items:center; justify-content:center; background: color-mix(in srgb, var(--status-good) 15%, transparent); color: var(--status-good); }
+    .cpu-status .ic svg { width:1.35rem; height:1.35rem; }
+    .cpu-status .head { font-weight:700; font-size:.9rem; display:flex; align-items:center; gap:.5rem; }
+    .cpu-status .dot { width:.5rem; height:.5rem; border-radius:50%; background: var(--status-good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-good) 22%, transparent); }
+    .cpu-status .sub { font-size:.78rem; color:var(--theme-fg-muted); margin-top:.12rem; line-height:1.5; }
+    .cpu-status .sub b { color: var(--theme-fg); }
+
+    /* Tabs */
+    .tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin:1.75rem 0 0; border-bottom:1px solid var(--theme-border); }
+    .tab { font: inherit; font-size:.85rem; font-weight:600; cursor:pointer; background:none; border:none; color:var(--theme-fg-subtle); padding:.6rem .9rem; border-radius:.5rem .5rem 0 0; border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tab:hover { color:var(--theme-fg); }
+    .tab.active { color:var(--theme-accent); border-bottom-color:var(--theme-accent); }
+    .panel { display:none; padding-top:1.5rem; }
+    .panel.active { display:block; }
+    .panel .lede { font-size:1.375rem; font-weight:700; letter-spacing:-.015em; margin:0 0 .4rem; }
+    .panel .note { font-size:.9rem; color:var(--theme-fg-muted); margin:0 0 1.1rem; max-width:48rem; }
+    .panel .model-meta { font-size:.7rem; color:var(--theme-fg-subtle); font-family: ui-monospace, Menlo, monospace; margin:0 0 1rem; }
+
+    .controls { display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; padding:.9rem 1rem; border:1px solid var(--theme-border); border-radius:.75rem; background:var(--theme-bg-subtle); }
+    .controls label { font-size:.75rem; color:var(--theme-fg-subtle); }
+    button, select, input[type=text], textarea, input[type=file] { font: inherit; font-size:.8125rem; padding:.45rem .8rem; border-radius:.5rem; border:1px solid var(--theme-border-strong); background:var(--theme-bg); color:var(--theme-fg); }
+    button { cursor:pointer; }
+    button.primary { background:var(--theme-accent); color:var(--theme-accent-fg); border-color:var(--theme-accent); font-weight:600; }
+    button:hover:not(:disabled) { border-color:var(--theme-accent); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    textarea { width:100%; min-height:3.2rem; resize:vertical; line-height:1.5; }
+    .runstate { font-size:.75rem; color:var(--theme-fg-subtle); }
+    .runstate b { color:var(--theme-accent); }
+
+    .prog { height:6px; background:var(--theme-bg-subtle); border-radius:999px; overflow:hidden; margin:.7rem 0 0; display:none; }
+    .prog.on { display:block; }
+    .prog > i { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--status-good), #0a7d33); transition: width .2s ease; }
+
+    .card { border:1px solid var(--theme-border); border-radius:.75rem; background:var(--surface-1); padding:1.1rem 1.2rem; margin-top:.9rem; }
+    .card h3 { font-size:.95rem; font-weight:700; margin:0 0 .15rem; }
+    .card .cap { font-size:.78rem; color:var(--theme-fg-subtle); margin:0 0 .8rem; }
+
+    .out { margin-top:.9rem; padding:.9rem 1rem; border:1px solid var(--theme-border); border-left:3px solid var(--series-2); border-radius:.6rem; background:var(--theme-bg); font-size:.95rem; line-height:1.6; white-space:pre-wrap; min-height:2.4rem; }
+    .out.empty { color:var(--theme-fg-subtle); font-style:italic; border-left-color:var(--theme-border-strong); }
+
+    /* score bars (CLIP + search) */
+    .bars { display:flex; flex-direction:column; gap:.5rem; margin-top:.2rem; }
+    .barrow { }
+    .barrow .top { display:flex; align-items:center; gap:.6rem; margin-bottom:.28rem; }
+    .barrow .lab { font-size:.8rem; color:var(--theme-fg); flex:1; }
+    .barrow .val { font-size:.7rem; font-weight:700; color:var(--series-1); font-variant-numeric:tabular-nums; }
+    .barrow .track { height:9px; border-radius:999px; background:var(--theme-bg-subtle); overflow:hidden; }
+    .barrow .track > i { display:block; height:100%; background:linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
+    .hit { border:1px solid var(--theme-border); border-radius:.6rem; padding:.6rem .75rem; margin-top:.5rem; background:var(--theme-bg); }
+    .hit .top { display:flex; align-items:center; gap:.6rem; margin-bottom:.3rem; }
+    .hit .rank { font-size:.68rem; font-weight:700; color:var(--theme-fg-subtle); font-family:ui-monospace,monospace; }
+    .hit .score { font-size:.68rem; font-weight:700; color:var(--series-1); }
+    .hit .bar { flex:1; height:8px; border-radius:999px; background:var(--theme-bg-subtle); overflow:hidden; }
+    .hit .bar > i { display:block; height:100%; background:linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
+    .hit .txt { font-size:.82rem; color:var(--theme-fg-muted); line-height:1.5; }
+
+    .samples { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.6rem; }
+    .thumb { width:74px; height:74px; object-fit:cover; border-radius:.5rem; border:2px solid var(--theme-border); cursor:pointer; transition:border-color .12s ease; }
+    .thumb:hover, .thumb.sel { border-color:var(--theme-accent); }
+    .preview { max-width:100%; max-height:260px; border-radius:.6rem; border:1px solid var(--theme-border); margin-top:.7rem; display:none; }
+    .preview.on { display:block; }
+    audio { width:100%; margin-top:.7rem; }
+    .muted { color:var(--theme-fg-subtle); }
+
+    footer { border-top:1px solid var(--theme-border); margin-top:3rem; padding-top:1.25rem; font-size:.75rem; color:var(--theme-fg-subtle); text-align:center; }
+    footer a { color:var(--theme-accent); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <header class="topnav">
+    <a class="brand" href="/"><span class="mark">▸_</span>Vipul Srivastava</a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/agent.html">Coding agent</a>
+      <a href="/rag.html">RAG</a>
+      <a href="/distill.html">Distillation</a>
+      <a href="/evals.html">Evals</a>
+      <a href="/modalities.html" class="active">Modalities</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="headline">Three modalities, still no server</h1>
+    <p class="dek">
+      The other playgrounds need WebGPU. These don't. <b>transformers.js</b> (ONNX Runtime Web) runs
+      real speech, vision, and embedding models <b>on your CPU via WebAssembly</b> — so speech-to-text,
+      zero-shot image understanding, and semantic search all work in any modern browser, with nothing
+      leaving the tab.
+    </p>
+
+    <div class="cpu-status">
+      <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></div>
+      <div>
+        <div class="head"><span class="dot"></span>Runs on your CPU — no GPU required</div>
+        <div class="sub">Models run in WebAssembly (optionally WebGPU-accelerated). First use downloads the weights once into your browser cache — <b>Whisper-tiny ~40 MB</b>, <b>CLIP ~90 MB</b>, <b>MiniLM ~30 MB</b> — then everything runs offline.</div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="speech">🎙 Speech → text</button>
+      <button class="tab" data-tab="vision">🖼 Image ↔ text</button>
+      <button class="tab" data-tab="search">🔎 Semantic search</button>
+    </div>
+
+    <!-- ============ SPEECH ============ -->
+    <section class="panel active" id="panel-speech" role="tabpanel">
+      <p class="lede">Whisper transcribes audio, locally.</p>
+      <p class="note">Play the built-in sample, upload an audio file, or record from your mic. It's decoded to 16 kHz mono in the browser and transcribed by <code>Xenova/whisper-tiny.en</code>. <b>The audio never leaves the tab.</b></p>
+      <p class="model-meta">automatic-speech-recognition · Xenova/whisper-tiny.en · ~40 MB</p>
+
+      <div class="controls">
+        <button class="primary" id="asr-sample">▸ Transcribe the sample clip</button>
+        <label for="asr-file">or a file</label>
+        <input type="file" id="asr-file" accept="audio/*" />
+        <button id="asr-mic">● Record mic</button>
+        <span class="runstate" id="asr-state">Ready.</span>
+      </div>
+      <div class="prog" id="asr-prog"><i></i></div>
+      <audio id="asr-audio" controls preload="none" src="/assets/samples/whisper-sample.wav"></audio>
+      <div class="out empty" id="asr-out">The transcript will appear here.</div>
+    </section>
+
+    <!-- ============ VISION ============ -->
+    <section class="panel" id="panel-vision" role="tabpanel">
+      <p class="lede">CLIP scores how well an image matches each label.</p>
+      <p class="note">Zero-shot image classification: no training for these labels — <code>Xenova/clip-vit-base-patch32</code> embeds the image and each candidate phrase into the same space and ranks them by similarity. Pick a sample or upload your own, edit the labels, and run.</p>
+      <p class="model-meta">zero-shot-image-classification · Xenova/clip-vit-base-patch32 · ~90 MB</p>
+
+      <div class="controls">
+        <label>Samples</label>
+        <img class="thumb sel" data-src="/vipul.jpeg" src="/vipul.jpeg" alt="sample: person" />
+        <img class="thumb" data-src="/assets/css/images/bg.jpg" src="/assets/css/images/bg.jpg" alt="sample: scene" />
+        <label for="clip-file">or upload</label>
+        <input type="file" id="clip-file" accept="image/*" />
+      </div>
+      <img class="preview on" id="clip-preview" src="/vipul.jpeg" alt="selected image" />
+      <div class="card">
+        <h3>Candidate labels</h3>
+        <p class="cap">One phrase per line. These are the classes CLIP will rank the image against.</p>
+        <textarea id="clip-labels">a photo of a person
+a landscape or nature scene
+a screenshot of software
+a diagram or chart
+a cat
+a plate of food</textarea>
+        <div style="margin-top:.7rem"><button class="primary" id="clip-run">Rank labels</button> <span class="runstate" id="clip-state">Ready.</span></div>
+        <div class="prog" id="clip-prog"><i></i></div>
+        <div class="bars" id="clip-bars"></div>
+      </div>
+    </section>
+
+    <!-- ============ SEARCH ============ -->
+    <section class="panel" id="panel-search" role="tabpanel">
+      <p class="lede">Search by meaning, not keywords.</p>
+      <p class="note">Every line of the corpus is embedded once into a 384-dim vector with <code>Xenova/all-MiniLM-L6-v2</code>; your query is embedded the same way and ranked by cosine similarity. No LLM, no keywords — this is the retrieval half of the <a href="/rag.html">RAG playground</a>, on its own.</p>
+      <p class="model-meta">feature-extraction · Xenova/all-MiniLM-L6-v2 · 384-dim · ~30 MB</p>
+
+      <div class="controls">
+        <button class="primary" id="emb-load">▸ Load model &amp; embed corpus</button>
+        <span class="runstate" id="emb-state">Idle.</span>
+      </div>
+      <div class="prog" id="emb-prog"><i></i></div>
+      <div class="card">
+        <h3>Ask the corpus</h3>
+        <p class="cap">Try “how do machines understand images?” or “a fast way to reduce model size”.</p>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap">
+          <input type="text" id="emb-query" placeholder="Search by meaning…" style="flex:1; min-width:16rem" />
+          <button id="emb-search">Search</button>
+        </div>
+        <div id="emb-hits"></div>
+      </div>
+    </section>
+
+    <footer>
+      Runs 100% in your browser on the CPU — no server, no API keys, no GPU.
+      <a href="/">Home</a> · <a href="/rag.html">RAG playground</a> · <a href="/agent.html">Coding agent</a>
+    </footer>
+  </main>
+
+<script type="module">
+const CDN = "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+const $ = s => document.querySelector(s);
+const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---- lazy transformers.js loader (shared across tabs) ---- */
+let TF = null;
+async function tf() {
+  if (TF) return TF;
+  TF = await import(CDN);
+  TF.env.allowLocalModels = false;
+  return TF;
+}
+function progressCb(progEl) {
+  return (r) => { if (r.status === "progress" && r.total) progEl.querySelector("i").style.width = Math.round(r.progress) + "%"; };
+}
+
+/* ---- tabs ---- */
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
+    const id = btn.dataset.tab;
+    document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + id));
+  });
+});
+
+/* ============================================================
+   1. SPEECH → TEXT  (Whisper-tiny.en)
+   ============================================================ */
+let asr = null;
+async function loadASR() {
+  if (asr) return asr;
+  const prog = $("#asr-prog"); prog.classList.add("on");
+  $("#asr-state").textContent = "Downloading Whisper-tiny…";
+  const { pipeline } = await tf();
+  asr = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en", { quantized: true, progress_callback: progressCb(prog) });
+  setTimeout(() => prog.classList.remove("on"), 400);
+  return asr;
+}
+// decode any audio to a 16 kHz mono Float32Array in the browser
+async function decodeAudio(arrayBuffer) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx({ sampleRate: 16000 });
+  const buf = await ctx.decodeAudioData(arrayBuffer);
+  const data = buf.getChannelData(0);           // mono (channel 0)
+  ctx.close();
+  return data;
+}
+async function transcribe(arrayBuffer, label) {
+  try {
+    $("#asr-out").classList.remove("empty");
+    const model = await loadASR();
+    $("#asr-state").innerHTML = `Transcribing <b>${esc(label)}</b>…`;
+    $("#asr-out").textContent = "…";
+    const audio = await decodeAudio(arrayBuffer);
+    const t0 = performance.now();
+    const out = await model(audio);
+    const ms = Math.round(performance.now() - t0);
+    $("#asr-out").textContent = (out.text || "").trim() || "(silence)";
+    $("#asr-state").innerHTML = `Done in <b>${ms} ms</b> · ${(audio.length/16000).toFixed(1)}s of audio.`;
+  } catch (e) {
+    $("#asr-state").textContent = "Failed: " + (e.message || e);
+    $("#asr-out").textContent = "Transcription failed: " + (e.message || e);
+  }
+}
+$("#asr-sample").addEventListener("click", async () => {
+  const buf = await (await fetch("/assets/samples/whisper-sample.wav")).arrayBuffer();
+  await transcribe(buf, "sample clip");
+});
+$("#asr-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  $("#asr-audio").src = URL.createObjectURL(f);
+  await transcribe(await f.arrayBuffer(), f.name);
+});
+$("#asr-mic").addEventListener("click", async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const rec = new MediaRecorder(stream);
+    const chunks = [];
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: rec.mimeType });
+      $("#asr-audio").src = URL.createObjectURL(blob);
+      await transcribe(await blob.arrayBuffer(), "your recording");
+    };
+    rec.start();
+    $("#asr-mic").textContent = "■ Stop"; $("#asr-state").textContent = "Recording… click stop.";
+    const stop = () => { rec.stop(); $("#asr-mic").textContent = "● Record mic"; $("#asr-mic").removeEventListener("click", stop); };
+    setTimeout(() => $("#asr-mic").addEventListener("click", stop, { once: true }), 0);
+  } catch (e) { $("#asr-state").textContent = "Mic unavailable: " + (e.message || e); }
+});
+
+/* ============================================================
+   2. IMAGE ↔ TEXT  (CLIP zero-shot)
+   ============================================================ */
+let clip = null, clipImage = "/vipul.jpeg";
+async function loadCLIP() {
+  if (clip) return clip;
+  const prog = $("#clip-prog"); prog.classList.add("on");
+  $("#clip-state").textContent = "Downloading CLIP…";
+  const { pipeline } = await tf();
+  clip = await pipeline("zero-shot-image-classification", "Xenova/clip-vit-base-patch32", { quantized: true, progress_callback: progressCb(prog) });
+  setTimeout(() => prog.classList.remove("on"), 400);
+  return clip;
+}
+document.querySelectorAll(".thumb").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".thumb").forEach(x => x.classList.toggle("sel", x === t));
+  clipImage = t.dataset.src;
+  const p = $("#clip-preview"); p.src = clipImage; p.classList.add("on");
+}));
+$("#clip-file").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  clipImage = URL.createObjectURL(f);
+  document.querySelectorAll(".thumb").forEach(x => x.classList.remove("sel"));
+  const p = $("#clip-preview"); p.src = clipImage; p.classList.add("on");
+});
+$("#clip-run").addEventListener("click", async () => {
+  const labels = $("#clip-labels").value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!labels.length) { $("#clip-state").textContent = "Add at least one label."; return; }
+  try {
+    $("#clip-run").disabled = true;
+    const model = await loadCLIP();
+    $("#clip-state").textContent = "Scoring…";
+    const t0 = performance.now();
+    const out = await model(clipImage, labels);
+    const ms = Math.round(performance.now() - t0);
+    const max = Math.max(...out.map(o => o.score), 1e-6);
+    $("#clip-bars").innerHTML = out.map(o => `
+      <div class="barrow">
+        <div class="top"><span class="lab">${esc(o.label)}</span><span class="val">${(o.score*100).toFixed(1)}%</span></div>
+        <div class="track"><i style="width:${Math.max(2,(o.score/max)*100)}%"></i></div>
+      </div>`).join("");
+    $("#clip-state").innerHTML = `Done in <b>${ms} ms</b>.`;
+  } catch (e) { $("#clip-state").textContent = "Failed: " + (e.message || e); }
+  finally { $("#clip-run").disabled = false; }
+});
+
+/* ============================================================
+   3. SEMANTIC SEARCH  (all-MiniLM-L6-v2 + cosine)
+   ============================================================ */
+const CORPUS = [
+  "Whisper is an automatic speech recognition model that transcribes spoken audio into text.",
+  "CLIP embeds images and text into a shared space, so you can match a picture to a caption without training.",
+  "Knowledge distillation trains a small student model to imitate a larger teacher, cutting cost and latency.",
+  "An embedding turns a sentence into a fixed-length vector that captures its meaning.",
+  "Cosine similarity measures the angle between two vectors and ignores their length.",
+  "Quantization shrinks a model by storing its weights in fewer bits, e.g. 4-bit instead of 16-bit.",
+  "WebGPU lets JavaScript run matrix multiplies on your graphics card for fast in-browser inference.",
+  "WebAssembly runs compiled code in the browser at near-native speed, on the CPU, with no GPU needed.",
+  "Retrieval-augmented generation grounds a model's answer in text retrieved from a corpus.",
+  "A tool loop lets a model call functions, read the results, and call again until it can answer.",
+];
+let embedder = null, corpusVecs = null;
+async function loadEmbedder() {
+  if (embedder) return embedder;
+  const prog = $("#emb-prog"); prog.classList.add("on");
+  $("#emb-state").textContent = "Downloading MiniLM…";
+  const { pipeline } = await tf();
+  embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { quantized: true, progress_callback: progressCb(prog) });
+  setTimeout(() => prog.classList.remove("on"), 400);
+  return embedder;
+}
+async function embed(texts) {
+  const model = await loadEmbedder();
+  const out = await model(texts, { pooling: "mean", normalize: true });
+  const dim = out.dims[out.dims.length - 1];
+  const vecs = [];
+  for (let i = 0; i < texts.length; i++) vecs.push(out.data.slice(i * dim, (i + 1) * dim));
+  return vecs;
+}
+function cosine(a, b) {   // reused from rag.html
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  return (na === 0 || nb === 0) ? 0 : dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+async function embedCorpus() {
+  $("#emb-load").disabled = true;
+  try {
+    corpusVecs = await embed(CORPUS);
+    $("#emb-state").innerHTML = `Embedded <b>${CORPUS.length}</b> lines · 384-dim · ready to search.`;
+  } catch (e) { $("#emb-state").textContent = "Failed: " + (e.message || e); }
+  finally { $("#emb-load").disabled = false; }
+}
+async function search() {
+  const q = $("#emb-query").value.trim(); if (!q) return;
+  if (!corpusVecs) await embedCorpus();
+  if (!corpusVecs) return;
+  const [qv] = await embed([q]);
+  const ranked = CORPUS.map((text, i) => ({ text, score: cosine(qv, corpusVecs[i]) })).sort((a,b) => b.score - a.score).slice(0, 5);
+  const max = Math.max(...ranked.map(r => r.score), 1e-6);
+  $("#emb-hits").innerHTML = ranked.map((r, i) => `
+    <div class="hit">
+      <div class="top"><span class="rank">#${i+1}</span><div class="bar"><i style="width:${Math.max(3,(r.score/max)*100)}%"></i></div><span class="score">${r.score.toFixed(3)}</span></div>
+      <div class="txt">${esc(r.text)}</div>
+    </div>`).join("");
+}
+$("#emb-load").addEventListener("click", embedCorpus);
+$("#emb-search").addEventListener("click", search);
+$("#emb-query").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+</script>
+</body>
+</html>
