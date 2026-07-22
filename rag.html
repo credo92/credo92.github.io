@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG, in your browser — retrieval, context budgets & tool loops</title>
+  <meta name="description" content="A from-scratch RAG pipeline running entirely in your browser: pdf.js for ingestion, all-MiniLM-L6-v2 embeddings via transformers.js, cosine similarity standing in for pgvector, a live token-budget compaction bar, and a real tool-call loop — the vllm-chatgpt backend, ported to the client." />
+  <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ---------- Theme (shared with evals.html / home.html) ---------- */
+    :root {
+      --theme-bg: #fff;
+      --theme-bg-subtle: #f7f7f5;
+      --theme-fg: #121212;
+      --theme-fg-muted: #333;
+      --theme-fg-subtle: #666;
+      --theme-accent: #326891;
+      --theme-accent-fg: #fff;
+      --theme-border: #e2e2e2;
+      --theme-border-strong: #ccc;
+
+      --surface-1: #f7f7f5;
+      --series-1: #2a78d6;   /* retrieved / kept  */
+      --series-2: #008300;   /* judge / tool ok   */
+      --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5;
+      --seq-550: #1c5cab; --seq-700: #0d366b;
+      --status-good: #0ca30c;
+      --status-critical: #d03b3b;
+      --status-warning: #fab219;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --ink-muted: #898781;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+        --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+        --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+        --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+        --surface-1: #1b1b1b; --series-1: #3987e5; --series-2: #008300;
+        --grid: #2c2c2a; --axis: #383835;
+      }
+    }
+    :root[data-theme="dark"] {
+      --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+      --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+      --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+      --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+      --surface-1: #1b1b1b; --series-1: #3987e5; --series-2: #008300;
+      --grid: #2c2c2a; --axis: #383835;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background:
+        radial-gradient(900px 460px at 84% -6%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 60%),
+        var(--theme-bg);
+      color: var(--theme-fg);
+      font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+      min-height: 100vh;
+    }
+    .headline { font-family: "Libre Baskerville", Georgia, serif; }
+    a { color: inherit; }
+
+    main { width: 100%; max-width: 60rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    @media (min-width: 640px) { main { padding: 4rem 1.5rem 5rem; } }
+
+    .back { display: inline-block; font-size: .75rem; font-weight: 500; color: var(--theme-fg-subtle); text-decoration: none; margin-bottom: 1.75rem; }
+    .back:hover { opacity: .7; }
+
+    h1 { font-size: 2rem; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; margin: 0 0 .6rem; }
+    @media (min-width: 640px) { h1 { font-size: 2.5rem; } }
+    .dek { font-size: 1.05rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 48rem; }
+
+    /* Notice callout */
+    .notice {
+      display: flex; align-items: flex-start; gap: .7rem; margin: 1.25rem 0 0;
+      padding: .8rem 1rem; border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-accent);
+      border-radius: .6rem; background: var(--theme-bg-subtle); font-size: .82rem; color: var(--theme-fg-muted);
+    }
+    .notice .ic { color: var(--theme-accent); flex-shrink: 0; }
+    .notice b { color: var(--theme-fg); }
+    code {
+      background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: 4px;
+      padding: .05rem .32rem; font-size: .82em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--theme-accent);
+    }
+
+    section { margin-top: 3rem; }
+    section > h2 {
+      font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--theme-fg-subtle); margin: 0 0 .35rem;
+      border-top: 1px solid var(--theme-border); padding-top: 1.5rem;
+    }
+    section > .lede { font-size: 1.375rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 .5rem; }
+    section > p.note { font-size: .9rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 48rem; }
+
+    /* Concept cards */
+    .concepts { display: grid; gap: .75rem; grid-template-columns: 1fr; }
+    @media (min-width: 700px) { .concepts { grid-template-columns: repeat(3, 1fr); } }
+    .concept { padding: .9rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--theme-bg-subtle); }
+    .concept .k { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem; margin-bottom: .3rem; }
+    .concept .n { display:inline-flex; align-items:center; justify-content:center; width:1.15rem; height:1.15rem; border-radius:5px; font-size:.7rem; font-weight:700; background:var(--theme-accent); color:var(--theme-accent-fg); flex-shrink:0; }
+    .concept p { margin: 0; font-size: .8rem; color: var(--theme-fg-muted); line-height: 1.55; }
+    .concept .ex { margin-top: .45rem; font-size: .7rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-fg-subtle); }
+
+    /* Controls */
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: .9rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--theme-bg-subtle); margin-bottom: 1rem; }
+    .controls label { font-size: .75rem; color: var(--theme-fg-subtle); }
+    button, select, input[type=text], input[type=number] {
+      font: inherit; font-size: .8125rem; padding: .45rem .8rem; border-radius: .5rem;
+      border: 1px solid var(--theme-border-strong); background: var(--theme-bg); color: var(--theme-fg);
+    }
+    button { cursor: pointer; }
+    button.primary { background: var(--theme-accent); color: var(--theme-accent-fg); border-color: var(--theme-accent); font-weight: 600; }
+    button:hover:not(:disabled) { border-color: var(--theme-accent); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    input[type=range] { accent-color: var(--theme-accent); }
+    .runstate { font-size: .75rem; color: var(--theme-fg-subtle); }
+    .runstate b { color: var(--theme-accent); }
+    .field { display:flex; align-items:center; gap:.4rem; }
+    .field input[type=text] { min-width: 15rem; flex: 1 1 15rem; }
+
+    /* Cards */
+    .card { border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--surface-1); padding: 1.1rem 1.2rem; margin-top: .9rem; }
+    .card h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .15rem; }
+    .card .cap { font-size: .78rem; color: var(--theme-fg-subtle); margin: 0 0 .9rem; }
+    .scroll { overflow-x: auto; }
+    svg { display: block; max-width: 100%; height: auto; }
+
+    /* KPI tiles */
+    .kpis { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 760px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+    .kpi { padding: .85rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--surface-1); }
+    .kpi .lab { font-size: .6875rem; text-transform: uppercase; letter-spacing: .06em; color: var(--theme-fg-subtle); }
+    .kpi .val { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin-top: .15rem; }
+    .kpi .sub { font-size: .7rem; color: var(--theme-fg-subtle); }
+
+    /* Progress */
+    .prog { height: 6px; background: var(--theme-bg-subtle); border-radius: 999px; overflow: hidden; margin: .5rem 0 0; display:none; }
+    .prog.on { display:block; }
+    .prog > i { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--seq-400), var(--seq-700)); transition: width .2s ease; }
+
+    /* Retrieved chunk rows */
+    .chunk { border:1px solid var(--theme-border); border-radius:.6rem; padding:.6rem .75rem; margin-top:.5rem; background: var(--theme-bg); }
+    .chunk .top { display:flex; align-items:center; gap:.6rem; margin-bottom:.35rem; }
+    .chunk .rank { font-size:.68rem; font-weight:700; color:var(--theme-fg-subtle); font-family: ui-monospace, monospace; }
+    .chunk .score { font-size:.68rem; font-weight:700; color:var(--series-1); font-variant-numeric: tabular-nums; }
+    .chunk .bar { flex:1; height:8px; border-radius:999px; background:var(--theme-bg-subtle); overflow:hidden; }
+    .chunk .bar > i { display:block; height:100%; background: linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
+    .chunk .txt { font-size:.78rem; color:var(--theme-fg-muted); line-height:1.5; }
+    .chunk .src { font-size:.66rem; color:var(--theme-fg-subtle); font-family: ui-monospace, monospace; margin-top:.25rem; }
+
+    .answer { margin-top:.9rem; padding:.9rem 1rem; border:1px solid var(--theme-border); border-left:3px solid var(--series-2); border-radius:.6rem; background:var(--theme-bg); font-size:.9rem; line-height:1.6; white-space:pre-wrap; }
+    .answer.empty { color: var(--theme-fg-subtle); font-style: italic; border-left-color: var(--theme-border-strong); }
+
+    /* Context-budget message list */
+    .msgs { display:flex; flex-direction:column; gap:.4rem; margin-top:.6rem; }
+    .msg { display:flex; align-items:flex-start; gap:.6rem; padding:.5rem .7rem; border-radius:.5rem; border:1px solid var(--theme-border); background: var(--theme-bg); font-size:.78rem; transition: opacity .2s ease; }
+    .msg .role { flex-shrink:0; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.12rem .4rem; border-radius:999px; }
+    .msg .role.system { background: color-mix(in srgb, var(--theme-accent) 16%, transparent); color: var(--theme-accent); }
+    .msg .role.user { background: color-mix(in srgb, var(--series-1) 16%, transparent); color: var(--series-1); }
+    .msg .role.assistant { background: color-mix(in srgb, var(--series-2) 16%, transparent); color: var(--series-2); }
+    .msg .body { flex:1; color:var(--theme-fg-muted); }
+    .msg .tok { flex-shrink:0; font-size:.66rem; color:var(--theme-fg-subtle); font-variant-numeric: tabular-nums; }
+    .msg.dropped { opacity:.32; }
+    .msg.dropped .body { text-decoration: line-through; }
+    .msg .pin { font-size:.6rem; color:var(--theme-accent); }
+
+    .budgetbar { height: 26px; border-radius: .5rem; overflow: hidden; display:flex; border:1px solid var(--theme-border); margin-top:.6rem; background: var(--theme-bg-subtle); }
+    .budgetbar > span { display:flex; align-items:center; justify-content:center; font-size:.66rem; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; }
+    .budgetbar .used { background: linear-gradient(90deg, var(--seq-400), var(--seq-700)); }
+    .budgetbar .free { color: var(--theme-fg-subtle); background: transparent; }
+    .budgetbar.over .used { background: linear-gradient(90deg, var(--status-warning), var(--status-critical)); }
+
+    /* Tool loop trace */
+    .trace { display:flex; flex-direction:column; gap:.5rem; margin-top:.6rem; }
+    .step { border:1px solid var(--theme-border); border-radius:.6rem; overflow:hidden; }
+    .step .h { display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem; font-size:.72rem; font-weight:700; background: var(--theme-bg-subtle); }
+    .step .h .tag { font-size:.6rem; padding:.1rem .4rem; border-radius:999px; text-transform:uppercase; letter-spacing:.04em; }
+    .step .h .tag.model { background: color-mix(in srgb, var(--theme-accent) 16%, transparent); color:var(--theme-accent); }
+    .step .h .tag.tool { background: color-mix(in srgb, var(--series-2) 16%, transparent); color:var(--series-2); }
+    .step pre { margin:0; padding:.6rem .7rem; font-size:.72rem; line-height:1.5; overflow-x:auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-fg-muted); white-space:pre-wrap; }
+
+    pre.code { background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: .6rem; padding: .8rem .9rem; overflow-x: auto; font-size: .72rem; line-height: 1.5; margin: .6rem 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .muted { color: var(--theme-fg-subtle); }
+    .row2 { display:grid; gap:.9rem; grid-template-columns: 1fr; }
+    @media (min-width: 780px){ .row2 { grid-template-columns: 1fr 1fr; } }
+
+    footer { border-top: 1px solid var(--theme-border); margin-top: 3rem; padding-top: 1.25rem; font-size: .75rem; color: var(--theme-fg-subtle); text-align: center; }
+    footer a { color: var(--theme-accent); text-decoration: none; }
+    #tip { position: fixed; pointer-events: none; z-index: 50; opacity: 0; transition: opacity .1s; background: var(--theme-fg); color: var(--theme-bg); font-size: .72rem; line-height: 1.35; padding: .35rem .5rem; border-radius: .35rem; max-width: 18rem; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    #tip.on { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="tip" role="tooltip"></div>
+<main>
+  <a class="back" href="/home.html">← Back to Vipul's projects</a>
+
+  <h1 class="headline">RAG, with nothing hidden</h1>
+  <p class="dek">
+    Retrieval-augmented generation is usually a black box: a document goes in, an answer comes out, and the
+    interesting middle — chunking, embeddings, similarity search, the context budget, the tool loop — is
+    server-side and invisible. This page is my <a href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener">vllm-chatgpt</a>
+    backend ported to run <b>entirely in your browser</b>, with every step drawn on screen.
+  </p>
+
+  <div class="notice" role="note">
+    <span class="ic" aria-hidden="true">ⓘ</span>
+    <p>
+      <b>Two models load on demand.</b> Embeddings use <code>Xenova/all-MiniLM-L6-v2</code> (~30&nbsp;MB) via
+      transformers.js — the same model <code>services/embeddings.py</code> uses. Generation uses a small
+      WebGPU model (~0.9&nbsp;GB, desktop Chrome/Edge). The <b>context-budget</b> and <b>retrieval</b> panels
+      work without the big model — that's where the ported logic lives.
+    </p>
+  </div>
+
+  <!-- ============ PIPELINE ============ -->
+  <section>
+    <h2>The pipeline</h2>
+    <p class="lede">Six steps, none of them magic.</p>
+    <p class="note">
+      In the original stack these are FastAPI routes over PostgreSQL + pgvector. Here each one runs client-side:
+      <code>pdf.js</code> for ingestion, a JS array for the vector store, cosine similarity for search.
+    </p>
+    <div class="concepts">
+      <div class="concept"><div class="k"><span class="n">1</span> Ingest & chunk</div><p><code>documents.py</code> reads the PDF and splits it into overlapping word windows.</p><div class="ex">chunk_size=800, overlap=200</div></div>
+      <div class="concept"><div class="k"><span class="n">2</span> Embed</div><p>Each chunk → a 384-dim vector with all-MiniLM-L6-v2.</p><div class="ex">embed_texts(chunks) → float32[384]</div></div>
+      <div class="concept"><div class="k"><span class="n">3</span> Store</div><p>Vectors go to pgvector in prod; here, a JS array persisted to IndexedDB.</p><div class="ex">db.chunks[] · {text, vec}</div></div>
+      <div class="concept"><div class="k"><span class="n">4</span> Retrieve</div><p>Embed the query, rank chunks by cosine similarity, keep the top-k.</p><div class="ex">cos(q, cₖ) → top-k</div></div>
+      <div class="concept"><div class="k"><span class="n">5</span> Fit the budget</div><p><code>context.py</code>: sliding window + drop-oldest until under the token limit.</p><div class="ex">apply_context_window(msgs)</div></div>
+      <div class="concept"><div class="k"><span class="n">6</span> Generate / call tools</div><p><code>vllm.py</code>: the model answers, or emits a tool call and loops on the result.</p><div class="ex">tool_calls → result → re-call</div></div>
+    </div>
+  </section>
+
+  <!-- ============ INGEST + RETRIEVE ============ -->
+  <section>
+    <h2>Ingest &amp; retrieve</h2>
+    <p class="lede">Ask a question; watch which chunks come back, and how sure the index is.</p>
+    <p class="note">
+      A small corpus about in-browser ML ships with the page (that's the committed corpus the search tool below
+      uses too). Add your own by dropping in a PDF — it's parsed, chunked and embedded locally; nothing leaves
+      the tab. Scores are raw cosine similarity, so the RAG step is visible, not implied.
+    </p>
+
+    <div class="controls">
+      <button class="primary" id="embed-btn">▸ Load embedding model &amp; index corpus</button>
+      <label for="pdf">or add a PDF</label>
+      <input type="file" id="pdf" accept="application/pdf" />
+      <label for="topk">top-k</label>
+      <input type="number" id="topk" value="3" min="1" max="8" style="width:4.5rem" />
+      <span class="runstate" id="embed-state">Idle — using a lexical fallback until the embedder loads.</span>
+    </div>
+    <div class="prog" id="embed-prog"><i></i></div>
+
+    <div class="kpis" id="index-kpis"></div>
+
+    <div class="card">
+      <h3>Ask the corpus</h3>
+      <p class="cap">The query is embedded and compared to every chunk. Bars are cosine similarity (0–1).</p>
+      <div class="field">
+        <input type="text" id="query" placeholder="e.g. How do embeddings turn text into vectors?" />
+        <button id="retrieve-btn">Retrieve</button>
+        <button id="answer-btn" title="Retrieve, then answer with the WebGPU model">Retrieve + answer</button>
+      </div>
+      <div id="retrieved"></div>
+      <div class="answer empty" id="answer">The generated answer will appear here. “Retrieve + answer” loads the WebGPU model (~0.9&nbsp;GB) the first time.</div>
+    </div>
+  </section>
+
+  <!-- ============ CONTEXT BUDGET ============ -->
+  <section>
+    <h2>The context budget</h2>
+    <p class="lede">Every turn you add is a turn something else falls out.</p>
+    <p class="note">
+      This is <code>services/context.py</code> ported almost line-for-line — pure logic, so it runs with no model
+      at all. <b>System messages are always kept.</b> Of the rest, only the last <em>N</em> survive the sliding
+      window; if that still blows the token budget, the oldest are dropped one at a time until it fits. Push the
+      budget down or add turns and watch messages fall out of context in real time.
+    </p>
+
+    <div class="controls">
+      <label for="budget">Token budget</label>
+      <input type="range" id="budget" min="80" max="1200" value="260" step="10" />
+      <span class="runstate"><b id="budget-val">260</b> tokens</span>
+      <label for="window" style="margin-left:.6rem">Sliding window N</label>
+      <input type="range" id="window" min="1" max="12" value="6" step="1" />
+      <span class="runstate"><b id="window-val">6</b> messages</span>
+      <button id="add-turn" style="margin-left:.6rem">+ Add a turn</button>
+      <button id="reset-turns">Reset</button>
+    </div>
+
+    <div class="card">
+      <h3>What actually reaches the model</h3>
+      <p class="cap">Kept messages are solid; struck-through &amp; faded ones were dropped by compaction. Token counts are approximate (≈ 4 chars/token).</p>
+      <div class="budgetbar" id="budgetbar"></div>
+      <div class="msgs" id="msglist"></div>
+    </div>
+
+    <details>
+      <summary style="cursor:pointer;font-size:.8rem;color:var(--theme-accent);margin-top:.6rem">Show the ported logic (Python → JS)</summary>
+      <pre class="code" id="context-src"></pre>
+    </details>
+  </section>
+
+  <!-- ============ TOOL LOOP ============ -->
+  <section>
+    <h2>The tool loop</h2>
+    <p class="lede">The model doesn't know 19² — but it knows how to ask.</p>
+    <p class="note">
+      The backend's browsing tools need a server (and CORS would block them here), so instead I define two
+      <b>real</b> local tools with JSON schemas: a <code>calculator</code> and a <code>corpus_search</code> over the
+      committed corpus. The loop is the genuine article from <code>vllm.py</code>: the model emits a
+      <code>tool_call</code>, we run the tool, append the result, and call again — until it answers without a tool.
+    </p>
+
+    <div class="row2">
+      <div class="card" style="margin-top:0">
+        <h3>Tool schemas</h3>
+        <p class="cap">Exactly what the model is told it can call.</p>
+        <pre class="code" id="tool-schemas"></pre>
+      </div>
+      <div class="card" style="margin-top:0">
+        <h3>Run the loop</h3>
+        <p class="cap">Needs the WebGPU model. Try a math question or “what is MiniLM's dimension?”.</p>
+        <div class="field">
+          <input type="text" id="tool-query" placeholder="e.g. what is 19 squared plus 4?" />
+          <button id="tool-run" class="primary">Run</button>
+        </div>
+        <span class="runstate" id="tool-state">Idle.</span>
+        <div class="trace" id="tool-trace"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Runs 100% in your browser — no server, no API keys. Ported from
+    <a href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener">credo92/vllm-chatgpt</a>.
+    <a href="/home.html">About Vipul</a> · <a href="/evals.html">Evals playground</a> · <a href="/">Coding agent</a>
+  </footer>
+</main>
+
+<script type="module">
+/* ============================================================
+   Ported from credo92/vllm-chatgpt. Origins noted per block.
+   ============================================================ */
+
+const $ = s => document.querySelector(s);
+const tip = $("#tip");
+function bindTip(el, html){
+  el.addEventListener("mousemove", e => { tip.innerHTML = html; tip.classList.add("on"); tip.style.left = Math.min(e.clientX+14, innerWidth-290)+"px"; tip.style.top = (e.clientY+16)+"px"; });
+  el.addEventListener("mouseleave", () => tip.classList.remove("on"));
+}
+const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ============================================================
+   0. THE COMMITTED CORPUS  (stands in for uploaded PDFs;
+      also the target of the corpus_search tool)
+   ============================================================ */
+const CORPUS = [
+`WebGPU is a browser API that exposes the GPU to JavaScript for general-purpose
+compute, not just graphics. Projects like web-llm compile quantized language
+models to WebGPU shaders so a model can run its matrix multiplies on your own
+graphics card, with no server and no API key. The first load downloads the
+weights into the browser cache; after that the model reasons offline.`,
+`An embedding turns a piece of text into a fixed-length list of numbers — a
+vector — that captures its meaning. Texts about similar things land near each
+other in this vector space. all-MiniLM-L6-v2 maps any sentence to a 384-dimensional
+vector. Because meaning becomes geometry, you can search by semantic similarity
+instead of exact keywords.`,
+`Cosine similarity measures the angle between two vectors, ignoring their length.
+It returns 1.0 when two vectors point the same way, 0 when they are orthogonal,
+and negative values when they oppose. Retrieval ranks stored chunks by the cosine
+similarity between each chunk's embedding and the query's embedding, then keeps
+the top-k highest-scoring chunks.`,
+`pgvector is a PostgreSQL extension that stores embedding vectors in a column and
+adds similarity operators, so nearest-neighbour search happens inside the database.
+In this browser port there is no database: chunk vectors live in a plain JavaScript
+array, cosine similarity is computed in a loop, and the array is persisted to
+IndexedDB so your index survives a page reload.`,
+`A context window is the maximum number of tokens a model can attend to at once.
+Long conversations overflow it, so the server compacts history: keep all system
+messages, keep only the last N turns via a sliding window, and if the result still
+exceeds the token budget, drop the oldest turns one by one until it fits. What the
+model never sees, it cannot use.`,
+`A tool loop lets a model act instead of guess. The model is given tool schemas; when
+it needs a fact it cannot produce, it emits a structured tool call instead of an
+answer. The runtime executes the tool, appends the result to the conversation, and
+calls the model again. The loop repeats until the model responds with no tool call —
+a final answer grounded in real tool output.`,
+`Retrieval-augmented generation, or RAG, grounds a model's answer in retrieved text.
+Rather than trusting the model's parametric memory, the system retrieves relevant
+chunks from a corpus and places them in the prompt as context. This reduces
+hallucination and lets a small model answer questions about documents it was never
+trained on, because the evidence travels with the question.`,
+];
+const CORPUS_TITLES = ["webgpu","embeddings","cosine-similarity","pgvector","context-window","tool-loop","rag"];
+
+/* ============================================================
+   1. CHUNKING  (port of documents.py::_chunk_text)
+   Whitespace tokens, fixed window with overlap.
+   ============================================================ */
+function chunkText(text, chunkSize = 120, overlap = 30){
+  if (!text) return [];
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const chunks = [];
+  let start = 0;
+  while (start < tokens.length){
+    const end = Math.min(tokens.length, start + chunkSize);
+    const chunk = tokens.slice(start, end).join(" ").trim();
+    if (chunk) chunks.push(chunk);
+    if (end === tokens.length) break;
+    start = Math.max(0, end - overlap);
+  }
+  return chunks;
+}
+
+/* ============================================================
+   2. VECTOR STORE  (JS array + cosine sim; pgvector stand-in)
+      Persisted to IndexedDB.  (port of embeddings.py intent)
+   ============================================================ */
+const STORE = { chunks: [] };  // { text, source, vec:Float32Array|null }
+
+function cosine(a, b){
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++){ dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+// lexical fallback so retrieval works before the embedder loads (token-overlap F1)
+const toks = s => (s||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(Boolean);
+function tokenF1(q, d){
+  const p = toks(q), g = toks(d); if(!p.length||!g.length) return 0;
+  const c = {}; g.forEach(t=>c[t]=(c[t]||0)+1); let o=0;
+  p.forEach(t=>{ if(c[t]>0){c[t]--;o++;} }); if(!o) return 0;
+  const pr=o/p.length, rc=o/g.length; return 2*pr*rc/(pr+rc);
+}
+
+/* --- IndexedDB persistence --- */
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("rag-demo", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(key, val){
+  try { const db = await idbOpen(); await new Promise((res,rej)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(val,key); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); } catch(e){}
+}
+async function idbGet(key){
+  try { const db = await idbOpen(); return await new Promise((res,rej)=>{ const tx=db.transaction("kv","readonly"); const rq=tx.objectStore("kv").get(key); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); } catch(e){ return null; }
+}
+async function persistStore(){
+  await idbSet("chunks", STORE.chunks.map(c => ({ text:c.text, source:c.source, vec: c.vec ? Array.from(c.vec) : null })));
+}
+
+/* --- Build the initial index from the committed corpus (no embeddings yet) --- */
+function indexCorpus(){
+  STORE.chunks = [];
+  CORPUS.forEach((doc, i) => {
+    chunkText(doc).forEach((text, j) => STORE.chunks.push({ text, source: `corpus/${CORPUS_TITLES[i]}#${j}`, vec: null }));
+  });
+  renderIndexKPIs();
+}
+
+/* ============================================================
+   3. EMBEDDINGS  (transformers.js, Xenova/all-MiniLM-L6-v2)
+      — same model as services/embeddings.py
+   ============================================================ */
+let embedder = null;
+async function loadEmbedder(){
+  if (embedder) return embedder;
+  const prog = $("#embed-prog"); prog.classList.add("on");
+  setEmbedState("Downloading <b>all-MiniLM-L6-v2</b>…");
+  const { pipeline, env } = await import("https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2");
+  env.allowLocalModels = false;
+  embedder = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+    quantized: true,
+    progress_callback: (r) => {
+      if (r.status === "progress" && r.total) prog.querySelector("i").style.width = Math.round(r.progress) + "%";
+    },
+  });
+  prog.querySelector("i").style.width = "100%";
+  setTimeout(() => prog.classList.remove("on"), 500);
+  return embedder;
+}
+async function embed(texts){
+  const model = await loadEmbedder();
+  const out = await model(texts, { pooling: "mean", normalize: true });  // matches sentence-transformers default
+  // out.data is a flat Float32Array of shape [n, 384]
+  const dim = out.dims[out.dims.length - 1];
+  const n = texts.length;
+  const vecs = [];
+  for (let i = 0; i < n; i++) vecs.push(out.data.slice(i*dim, (i+1)*dim));
+  return vecs;
+}
+
+let embedReady = false;
+async function embedIndex(){
+  await loadEmbedder();
+  const texts = STORE.chunks.map(c => c.text);
+  setEmbedState(`Embedding <b>${texts.length}</b> chunks…`);
+  const vecs = await embed(texts);
+  STORE.chunks.forEach((c, i) => c.vec = vecs[i]);
+  embedReady = true;
+  await persistStore();
+  setEmbedState(`Indexed <b>${STORE.chunks.length}</b> chunks · 384-dim · cosine search live.`);
+  renderIndexKPIs();
+}
+
+/* ============================================================
+   4. RETRIEVAL  (cosine top-k; visible scores)
+   ============================================================ */
+async function retrieve(query, k){
+  let scored;
+  if (embedReady){
+    const [qv] = await embed([query]);
+    scored = STORE.chunks.map(c => ({ ...c, score: c.vec ? cosine(qv, c.vec) : 0, mode: "cosine" }));
+  } else {
+    scored = STORE.chunks.map(c => ({ ...c, score: tokenF1(query, c.text), mode: "lexical" }));
+  }
+  scored.sort((a,b) => b.score - a.score);
+  return scored.slice(0, k);
+}
+
+function renderRetrieved(hits){
+  const box = $("#retrieved");
+  if (!hits.length){ box.innerHTML = `<p class="muted" style="font-size:.8rem;margin-top:.6rem">No chunks indexed yet.</p>`; return; }
+  const max = Math.max(...hits.map(h => h.score), 0.0001);
+  box.innerHTML = hits.map((h, i) => `
+    <div class="chunk">
+      <div class="top">
+        <span class="rank">#${i+1}</span>
+        <div class="bar"><i style="width:${Math.max(3, (h.score/max)*100)}%"></i></div>
+        <span class="score">${h.score.toFixed(3)}</span>
+      </div>
+      <div class="txt">${esc(h.text)}</div>
+      <div class="src">${esc(h.source)} · ${h.mode}</div>
+    </div>`).join("");
+}
+
+/* ============================================================
+   5. CONTEXT WINDOW  (near line-for-line port of context.py)
+   ============================================================ */
+// port of utils/tokens.py::count_tokens (approximate — no HF tokenizer client-side)
+function countTokens(text){ return Math.ceil((text || "").length / 4); }
+// port of utils/tokens.py::count_tokens_for_messages
+function countTokensForMessages(messages){
+  let combined = "";
+  for (const m of messages) combined += `${m.role || ""}: ${m.content || ""}\n`;
+  return countTokens(combined);
+}
+// port of services/context.py::apply_context_window
+function applyContextWindow(messages, { slidingWindowSize, contextWindow }){
+  const systemMessages = messages.filter(m => m.role === "system");
+  const otherMessages  = messages.filter(m => m.role !== "system");
+
+  const windowSize = Math.max(1, slidingWindowSize);
+  const windowStart = Math.max(0, otherMessages.length - windowSize);
+  const trimmedByWindow = new Set(otherMessages.slice(0, windowStart)); // dropped by sliding window
+  let compactOthers = otherMessages.slice(windowStart);
+
+  let compact = [...systemMessages, ...compactOthers];
+  const droppedByBudget = new Set();
+
+  if (countTokensForMessages(compact) > contextWindow){
+    // drop from the oldest of the windowed set until under the limit
+    while (compactOthers.length){
+      if (countTokensForMessages([...systemMessages, ...compactOthers]) <= contextWindow) break;
+      droppedByBudget.add(compactOthers.shift());
+    }
+  }
+  return { kept: [...systemMessages, ...compactOthers], trimmedByWindow, droppedByBudget };
+}
+
+/* --- The visualized conversation --- */
+const SEED_MSGS = [
+  { role:"system",    content:"You are a helpful assistant grounded in the user's uploaded documents. Cite retrieved chunks when relevant and keep answers concise." },
+  { role:"user",      content:"Hey — can you help me understand how this whole browser-RAG thing fits together?" },
+  { role:"assistant", content:"Absolutely. At a high level: your document is chunked, each chunk is embedded into a 384-dim vector, and those vectors are searched by cosine similarity to find what's relevant to your question." },
+  { role:"user",      content:"And where do the vectors actually live if there's no database in the browser?" },
+  { role:"assistant", content:"In a plain JavaScript array, persisted to IndexedDB so it survives reloads. In the original server build that's a pgvector column in PostgreSQL instead." },
+  { role:"user",      content:"Got it. What happens when the conversation gets really long and blows past the model's limit?" },
+];
+let convo = SEED_MSGS.map(m => ({ ...m }));
+const EXTRA_TURNS = [
+  { role:"assistant", content:"Then compaction kicks in: system messages are always kept, only the last N turns survive the sliding window, and older turns get dropped until the token budget fits." },
+  { role:"user",      content:"So the oldest stuff silently disappears from what the model can see?" },
+  { role:"assistant", content:"Exactly — what the model never receives, it cannot use. That's why the earliest turns fade out of the panel as you tighten the budget." },
+  { role:"user",      content:"Does the system prompt ever get dropped to make room?" },
+  { role:"assistant", content:"No — system messages are pinned. Only non-system turns are candidates for the sliding window and the drop-oldest loop." },
+  { role:"user",      content:"Neat. Can you walk me through the cosine similarity math once more, slowly?" },
+];
+let extraIdx = 0;
+
+function renderContext(){
+  const contextWindow = +$("#budget").value;
+  const slidingWindowSize = +$("#window").value;
+  $("#budget-val").textContent = contextWindow;
+  $("#window-val").textContent = slidingWindowSize;
+
+  const { kept, trimmedByWindow, droppedByBudget } = applyContextWindow(convo, { slidingWindowSize, contextWindow });
+  const keptSet = new Set(kept);
+  const usedTokens = countTokensForMessages(kept);
+
+  // budget bar
+  const pctUsed = Math.min(100, (usedTokens / contextWindow) * 100);
+  const bar = $("#budgetbar");
+  bar.classList.toggle("over", usedTokens > contextWindow);
+  bar.innerHTML =
+    `<span class="used" style="width:${pctUsed}%">${usedTokens} tok in context</span>` +
+    `<span class="free" style="width:${100-pctUsed}%">${Math.max(0, contextWindow-usedTokens)} free</span>`;
+
+  // message list
+  $("#msglist").innerHTML = convo.map(m => {
+    const dropped = !keptSet.has(m);
+    const why = trimmedByWindow.has(m) ? "dropped by sliding window" : droppedByBudget.has(m) ? "dropped to fit token budget" : "";
+    const pin = m.role === "system" ? `<span class="pin" title="System messages are always kept">📌 pinned</span>` : "";
+    return `<div class="msg ${dropped ? "dropped":""}" ${why?`title="${why}"`:""}>
+      <span class="role ${m.role}">${m.role}</span>
+      <span class="body">${esc(m.content)} ${pin}</span>
+      <span class="tok">≈${countTokens(`${m.role}: ${m.content}\n`)}</span>
+    </div>`;
+  }).join("");
+}
+
+/* ============================================================
+   6. TOOL LOOP  (port of vllm.py::generate_chat_completion loop)
+      Local tools with real JSON schemas.
+   ============================================================ */
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "calculator",
+      description: "Evaluate a basic arithmetic expression and return the numeric result. Use for any math the user asks.",
+      parameters: {
+        type: "object",
+        required: ["expression"],
+        properties: { expression: { type: "string", description: "Arithmetic expression, e.g. '19*19 + 4'. Digits, + - * / ( ) . only." } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "corpus_search",
+      description: "Search the local document corpus and return the most relevant chunk. Use when the user asks about facts that might be in the documents.",
+      parameters: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string", description: "A natural-language search query." } },
+      },
+    },
+  },
+];
+
+function runTool(name, args){
+  if (name === "calculator"){
+    const expr = String(args.expression || "");
+    if (!/^[-+*/(). \d]+$/.test(expr)) return { error: "expression contains disallowed characters" };
+    try { const val = Function(`"use strict"; return (${expr});`)(); return { result: val }; }
+    catch(e){ return { error: "could not evaluate expression" }; }
+  }
+  if (name === "corpus_search"){
+    const scored = STORE.chunks.map(c => ({ text:c.text, source:c.source, score: tokenF1(String(args.query||""), c.text) }));
+    scored.sort((a,b)=>b.score-a.score);
+    const top = scored[0] || { text:"(corpus empty)", source:"-", score:0 };
+    return { top_chunk: top.text, source: top.source, score: +top.score.toFixed(3) };
+  }
+  return { error: `unknown tool ${name}` };
+}
+
+// The model speaks a small JSON tool protocol (robust for tiny WebGPU models —
+// same control flow as vllm.py, text transport instead of the native tool field).
+function toolSystemPrompt(){
+  return [
+    "You are an assistant that can call tools. The available tools are:",
+    JSON.stringify(TOOLS.map(t => t.function), null, 0),
+    "",
+    "When you need a tool, reply with ONLY a JSON object on one line:",
+    '{"tool_call":{"name":"<tool>","arguments":{...}}}',
+    "After you receive a line starting with TOOL_RESULT, either call another tool the same way,",
+    "or give the final answer as plain text (no JSON). Never invent tool results.",
+  ].join("\n");
+}
+function parseToolCall(text){
+  const m = text.match(/\{[\s\S]*"tool_call"[\s\S]*\}/);
+  if (!m) return null;
+  try { const o = JSON.parse(m[0]); return o.tool_call && o.tool_call.name ? o.tool_call : null; }
+  catch { return null; }
+}
+
+async function runToolLoop(userPrompt){
+  const engine = await ensureLLM();
+  if (!engine) return;
+  const traceEl = $("#tool-trace"); traceEl.innerHTML = "";
+  const addStep = (tag, cls, title, body) => {
+    const div = document.createElement("div");
+    div.className = "step";
+    div.innerHTML = `<div class="h"><span class="tag ${cls}">${tag}</span> ${esc(title)}</div><pre>${esc(body)}</pre>`;
+    traceEl.appendChild(div);
+  };
+
+  let messages = [
+    { role: "system", content: toolSystemPrompt() },
+    { role: "user", content: userPrompt },
+  ];
+  const MAX_ROUNDS = 5;  // vllm.py uses max_tool_rounds
+  for (let round = 0; round < MAX_ROUNDS; round++){
+    setToolState(`Model thinking (round ${round+1})…`);
+    const reply = await engine.chat.completions.create({ messages, temperature: 0 });
+    const text = (reply?.choices?.[0]?.message?.content || "").trim();
+    const call = parseToolCall(text);
+    if (!call){
+      addStep("MODEL", "model", "final answer", text);
+      setToolState("Done — model answered without another tool call.");
+      return;
+    }
+    addStep("MODEL", "model", `tool_call → ${call.name}`, JSON.stringify(call.arguments, null, 2));
+    messages.push({ role: "assistant", content: text });
+    const result = runTool(call.name, call.arguments || {});
+    addStep("TOOL", "tool", `${call.name} result`, JSON.stringify(result, null, 2));
+    messages.push({ role: "user", content: `TOOL_RESULT ${call.name}: ${JSON.stringify(result)}` });
+  }
+  setToolState("Stopped — hit the max tool-round limit (as vllm.py does).");
+}
+
+/* ============================================================
+   7. GENERATION  (web-llm; loader pattern from index.html)
+   ============================================================ */
+let llm = null, llmModel = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+function resolveModelId(webllm, wanted){
+  try {
+    const list = (webllm.prebuiltAppConfig?.model_list || []).map(m => m.model_id);
+    if (list.includes(wanted)) return wanted;
+    const base = wanted.replace(/-q4f(16|32)_1-MLC$/, "");
+    return list.find(id => id.startsWith(base)) || wanted;
+  } catch { return wanted; }
+}
+async function ensureLLM(){
+  if (llm) return llm;
+  if (!navigator.gpu){ setToolState("<b>WebGPU unavailable.</b> Open in desktop Chrome/Edge to run the model."); setAnswer("WebGPU is unavailable — open this page in desktop Chrome or Edge to generate answers.", true); return null; }
+  const webllm = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm");
+  const model = resolveModelId(webllm, llmModel);
+  setToolState("Loading WebGPU model…"); setAnswer("Loading the WebGPU model (~0.9 GB on first run)…", true);
+  llm = await webllm.CreateMLCEngine(model, {
+    initProgressCallback: r => { const p = Math.round((r.progress||0)*100); setToolState(`Loading model — ${p}%`); setAnswer(`Loading the WebGPU model — ${p}%`, true); },
+  });
+  return llm;
+}
+
+async function answerWithContext(query){
+  const k = Math.max(1, Math.min(8, +$("#topk").value || 3));
+  const hits = await retrieve(query, k);
+  renderRetrieved(hits);
+  const engine = await ensureLLM();
+  if (!engine) return;
+  const context = hits.map((h,i) => `[${i+1}] (${h.source})\n${h.text}`).join("\n\n");
+  const messages = [
+    { role: "system", content: "Answer the question using ONLY the context below. If the context doesn't contain the answer, say so. Cite chunks like [1], [2].\n\nContext:\n" + context },
+    { role: "user", content: query },
+  ];
+  setAnswer("Generating…", true);
+  try {
+    const reply = await engine.chat.completions.create({ messages, temperature: 0.2 });
+    setAnswer(reply?.choices?.[0]?.message?.content?.trim() || "(no answer)", false);
+  } catch(e){ setAnswer("Generation failed: " + (e.message||e), true); }
+}
+
+/* ============================================================
+   8. RENDER HELPERS + WIRE-UP
+   ============================================================ */
+const setEmbedState = h => $("#embed-state").innerHTML = h;
+const setToolState  = h => $("#tool-state").innerHTML = h;
+function setAnswer(text, empty){ const a = $("#answer"); a.textContent = text; a.classList.toggle("empty", !!empty); }
+function renderIndexKPIs(){
+  const withVec = STORE.chunks.filter(c => c.vec).length;
+  const tiles = [
+    { lab:"Corpus docs", val: CORPUS.length, sub:"committed to the repo" },
+    { lab:"Chunks", val: STORE.chunks.length, sub:"≈120-word windows, 30 overlap" },
+    { lab:"Embedded", val: withVec, sub: embedReady ? "384-dim vectors" : "lexical fallback active" },
+    { lab:"Vector store", val:"IndexedDB", sub:"pgvector stand-in" },
+  ];
+  $("#index-kpis").innerHTML = tiles.map(t => `<div class="kpi"><div class="lab">${t.lab}</div><div class="val">${t.val}</div><div class="sub">${t.sub}</div></div>`).join("");
+}
+
+// source listings for the <details>/schema panels
+$("#context-src").textContent =
+`# services/context.py  →  JS
+def apply_context_window(messages):
+    system = [m for m in messages if m["role"] == "system"]   # always kept
+    other  = [m for m in messages if m["role"] != "system"]
+    other  = other[-SLIDING_WINDOW_SIZE:]                     # sliding window
+    compact = [*system, *other]
+    while count_tokens(compact) > CONTEXT_WINDOW and other:   # drop oldest
+        other.pop(0)
+        compact = [*system, *other]
+    return compact`;
+$("#tool-schemas").textContent = JSON.stringify(TOOLS, null, 2);
+
+/* wire-up */
+$("#embed-btn").addEventListener("click", async () => {
+  $("#embed-btn").disabled = true;
+  try { await embedIndex(); } catch(e){ setEmbedState("Embedder failed: " + (e.message||e)); }
+  finally { $("#embed-btn").disabled = false; }
+});
+$("#pdf").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    setEmbedState(`Reading <b>${esc(file.name)}</b>…`);
+    const pdfjs = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs");
+    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs";
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: buf }).promise;
+    let text = "";
+    for (let p = 1; p <= pdf.numPages; p++){ const page = await pdf.getPage(p); const c = await page.getTextContent(); text += c.items.map(i => i.str).join(" ") + "\n"; }
+    const newChunks = chunkText(text).map((t, j) => ({ text: t, source: `${file.name}#${j}`, vec: null }));
+    STORE.chunks.push(...newChunks);
+    setEmbedState(`Added <b>${newChunks.length}</b> chunks from ${esc(file.name)}. Click “Load embedding model” to embed them.`);
+    renderIndexKPIs();
+  } catch(err){ setEmbedState("PDF parse failed: " + (err.message||err)); }
+});
+$("#retrieve-btn").addEventListener("click", async () => { const q = $("#query").value.trim(); if(!q) return; renderRetrieved(await retrieve(q, Math.max(1,Math.min(8,+$("#topk").value||3)))); });
+$("#answer-btn").addEventListener("click", async () => { const q = $("#query").value.trim(); if(!q) return; await answerWithContext(q); });
+$("#query").addEventListener("keydown", e => { if(e.key==="Enter") $("#retrieve-btn").click(); });
+
+$("#budget").addEventListener("input", renderContext);
+$("#window").addEventListener("input", renderContext);
+$("#add-turn").addEventListener("click", () => { if (extraIdx < EXTRA_TURNS.length){ convo.push({ ...EXTRA_TURNS[extraIdx++] }); renderContext(); } });
+$("#reset-turns").addEventListener("click", () => { convo = SEED_MSGS.map(m => ({...m})); extraIdx = 0; renderContext(); });
+
+$("#tool-run").addEventListener("click", async () => { const q = $("#tool-query").value.trim(); if(!q) return; $("#tool-run").disabled = true; try { await runToolLoop(q); } catch(e){ setToolState("Loop failed: " + (e.message||e)); } finally { $("#tool-run").disabled = false; } });
+$("#tool-query").addEventListener("keydown", e => { if(e.key==="Enter") $("#tool-run").click(); });
+
+/* boot */
+(async function boot(){
+  indexCorpus();
+  // restore any embedded index from a previous session
+  const saved = await idbGet("chunks");
+  if (saved && Array.isArray(saved) && saved.some(c => c.vec)){
+    STORE.chunks = saved.map(c => ({ text:c.text, source:c.source, vec: c.vec ? Float32Array.from(c.vec) : null }));
+    embedReady = STORE.chunks.some(c => c.vec);
+    if (embedReady) setEmbedState(`Restored <b>${STORE.chunks.length}</b> embedded chunks from IndexedDB · cosine search live.`);
+  }
+  renderIndexKPIs();
+  renderContext();
+})();
+addEventListener("resize", renderContext);
+</script>
+</body>
+</html>

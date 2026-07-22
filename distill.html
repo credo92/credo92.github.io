@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Model distillation, side by side — teacher vs student in your browser</title>
+  <meta name="description" content="A distillation playground running entirely in your browser: a teacher (Qwen2.5-1.5B) and a student (Llama-3.2-1B) answer the same prompt via web-llm, with latency and token counts, a teacher-as-judge pass charted in SVG, and a one-click dataset export — the vllm-model-distillation backend, ported to the client." />
+  <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --theme-bg: #fff; --theme-bg-subtle: #f7f7f5;
+      --theme-fg: #121212; --theme-fg-muted: #333; --theme-fg-subtle: #666;
+      --theme-accent: #326891; --theme-accent-fg: #fff;
+      --theme-border: #e2e2e2; --theme-border-strong: #ccc;
+      --surface-1: #f7f7f5;
+      --series-1: #2a78d6;   /* teacher */
+      --series-2: #008300;   /* student */
+      --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab; --seq-700: #0d366b;
+      --status-good: #0ca30c; --status-critical: #d03b3b; --status-warning: #fab219;
+      --grid: #e1e0d9; --axis: #c3c2b7; --ink-muted: #898781;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+        --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+        --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+        --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+        --surface-1: #1b1b1b; --series-1: #3987e5; --series-2: #008300;
+        --grid: #2c2c2a; --axis: #383835;
+      }
+    }
+    :root[data-theme="dark"] {
+      --theme-bg: #121212; --theme-bg-subtle: #1b1b1b;
+      --theme-fg: #f4f4f2; --theme-fg-muted: #cfcfcf; --theme-fg-subtle: #9a9a9a;
+      --theme-accent: #6ea8d0; --theme-accent-fg: #0d1116;
+      --theme-border: #2a2a2a; --theme-border-strong: #3a3a3a;
+      --surface-1: #1b1b1b; --series-1: #3987e5; --series-2: #008300;
+      --grid: #2c2c2a; --axis: #383835;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(900px 460px at 84% -6%, color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 60%), var(--theme-bg);
+      color: var(--theme-fg);
+      font-family: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; line-height: 1.55; min-height: 100vh;
+    }
+    .headline { font-family: "Libre Baskerville", Georgia, serif; }
+    a { color: inherit; }
+    main { width: 100%; max-width: 60rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    @media (min-width: 640px) { main { padding: 4rem 1.5rem 5rem; } }
+    .back { display: inline-block; font-size: .75rem; font-weight: 500; color: var(--theme-fg-subtle); text-decoration: none; margin-bottom: 1.75rem; }
+    .back:hover { opacity: .7; }
+    h1 { font-size: 2rem; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; margin: 0 0 .6rem; }
+    @media (min-width: 640px) { h1 { font-size: 2.5rem; } }
+    .dek { font-size: 1.05rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 48rem; }
+    .notice { display: flex; align-items: flex-start; gap: .7rem; margin: 1.25rem 0 0; padding: .8rem 1rem; border: 1px solid var(--theme-border); border-left: 3px solid var(--theme-accent); border-radius: .6rem; background: var(--theme-bg-subtle); font-size: .82rem; color: var(--theme-fg-muted); }
+    .notice .ic { color: var(--theme-accent); flex-shrink: 0; }
+    .notice b { color: var(--theme-fg); }
+    code { background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: 4px; padding: .05rem .32rem; font-size: .82em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--theme-accent); }
+    section { margin-top: 3rem; }
+    section > h2 { font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--theme-fg-subtle); margin: 0 0 .35rem; border-top: 1px solid var(--theme-border); padding-top: 1.5rem; }
+    section > .lede { font-size: 1.375rem; font-weight: 700; letter-spacing: -.015em; margin: 0 0 .5rem; }
+    section > p.note { font-size: .9rem; color: var(--theme-fg-muted); margin: 0 0 1.25rem; max-width: 48rem; }
+
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; padding: .9rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--theme-bg-subtle); margin-bottom: 1rem; }
+    .controls label { font-size: .75rem; color: var(--theme-fg-subtle); }
+    button, select, input[type=text], textarea { font: inherit; font-size: .8125rem; padding: .45rem .8rem; border-radius: .5rem; border: 1px solid var(--theme-border-strong); background: var(--theme-bg); color: var(--theme-fg); }
+    button { cursor: pointer; }
+    button.primary { background: var(--theme-accent); color: var(--theme-accent-fg); border-color: var(--theme-accent); font-weight: 600; }
+    button:hover:not(:disabled) { border-color: var(--theme-accent); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .runstate { font-size: .75rem; color: var(--theme-fg-subtle); }
+    .runstate b { color: var(--theme-accent); }
+    textarea { width: 100%; min-height: 4.5rem; resize: vertical; line-height: 1.5; }
+    .prog { height: 6px; background: var(--theme-bg); border-radius: 999px; overflow: hidden; margin: .6rem 0 0; display:none; }
+    .prog.on { display:block; }
+    .prog > i { display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--seq-400), var(--seq-700)); transition: width .2s ease; }
+
+    .kpis { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 760px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+    .kpi { padding: .85rem 1rem; border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--surface-1); }
+    .kpi .lab { font-size: .6875rem; text-transform: uppercase; letter-spacing: .06em; color: var(--theme-fg-subtle); }
+    .kpi .val { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; margin-top: .15rem; }
+    .kpi .sub { font-size: .7rem; color: var(--theme-fg-subtle); }
+
+    .card { border: 1px solid var(--theme-border); border-radius: .75rem; background: var(--surface-1); padding: 1.1rem 1.2rem; margin-top: .9rem; }
+    .card h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .15rem; }
+    .card .cap { font-size: .78rem; color: var(--theme-fg-subtle); margin: 0 0 .9rem; }
+    .scroll { overflow-x: auto; }
+    svg { display: block; max-width: 100%; height: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .75rem; color: var(--theme-fg-muted); margin-bottom: .7rem; }
+    .legend .item { display: inline-flex; align-items: center; gap: .35rem; }
+    .sw { width: 11px; height: 11px; border-radius: 3px; }
+
+    /* side-by-side */
+    .duo { display:grid; gap:.9rem; grid-template-columns: 1fr; margin-top:.9rem; }
+    @media (min-width: 780px){ .duo { grid-template-columns: 1fr 1fr; } }
+    .out { border:1px solid var(--theme-border); border-radius:.75rem; background: var(--surface-1); overflow:hidden; display:flex; flex-direction:column; }
+    .out .hd { display:flex; align-items:center; gap:.5rem; padding:.6rem .9rem; border-bottom:1px solid var(--theme-border); }
+    .out .hd .role { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.14rem .5rem; border-radius:999px; }
+    .out.teacher .role { background: color-mix(in srgb, var(--series-1) 16%, transparent); color: var(--series-1); }
+    .out.student .role { background: color-mix(in srgb, var(--series-2) 16%, transparent); color: var(--series-2); }
+    .out .hd .mdl { font-size:.72rem; font-weight:600; }
+    .out .hd .spacer { flex:1; }
+    .out .hd .stat { font-size:.66rem; color:var(--theme-fg-subtle); font-variant-numeric: tabular-nums; }
+    .out .body { padding:.8rem .9rem; font-size:.82rem; line-height:1.6; white-space:pre-wrap; color:var(--theme-fg-muted); min-height:5rem; flex:1; }
+    .out .body.empty { color:var(--theme-fg-subtle); font-style:italic; }
+    .verdict { margin-top:.6rem; padding:.7rem .9rem; border:1px solid var(--theme-border); border-left:3px solid var(--theme-accent); border-radius:.6rem; font-size:.82rem; background:var(--surface-1); }
+    .verdict b { color: var(--theme-fg); }
+
+    /* logged triples */
+    .log { display:flex; flex-direction:column; gap:.5rem; margin-top:.6rem; }
+    .logrow { border:1px solid var(--theme-border); border-radius:.6rem; padding:.6rem .8rem; background:var(--theme-bg); font-size:.8rem; }
+    .logrow .q { font-weight:600; margin-bottom:.2rem; }
+    .logrow .meta { font-size:.68rem; color:var(--theme-fg-subtle); font-family: ui-monospace, monospace; }
+    .badge { font-size:.62rem; font-weight:700; padding:.1rem .45rem; border-radius:999px; }
+    .badge.g { background: color-mix(in srgb, var(--status-good) 14%, transparent); color: var(--status-good); }
+    pre.code { background: var(--theme-bg-subtle); border: 1px solid var(--theme-border); border-radius: .6rem; padding: .8rem .9rem; overflow-x: auto; font-size: .72rem; line-height: 1.5; margin: .6rem 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .muted { color: var(--theme-fg-subtle); }
+    footer { border-top: 1px solid var(--theme-border); margin-top: 3rem; padding-top: 1.25rem; font-size: .75rem; color: var(--theme-fg-subtle); text-align: center; }
+    footer a { color: var(--theme-accent); text-decoration: none; }
+    #tip { position: fixed; pointer-events: none; z-index: 50; opacity: 0; transition: opacity .1s; background: var(--theme-fg); color: var(--theme-bg); font-size: .72rem; line-height: 1.35; padding: .35rem .5rem; border-radius: .35rem; max-width: 18rem; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    #tip.on { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="tip" role="tooltip"></div>
+<main>
+  <a class="back" href="/home.html">← Back to Vipul's projects</a>
+
+  <h1 class="headline">Distillation, watched live</h1>
+  <p class="dek">
+    Knowledge distillation trains a small <em>student</em> model to imitate a larger <em>teacher</em>. The usual
+    version is a training job you can't see. This is my
+    <a href="https://github.com/credo92/vllm-model-distillation" target="_blank" rel="noopener">vllm-model-distillation</a>
+    backend ported to the browser: a teacher and a student answer the same prompt <b>side by side</b> via WebGPU,
+    with latency, token counts, a teacher-as-judge pass, and a one-click dataset export.
+  </p>
+
+  <div class="notice" role="note">
+    <span class="ic" aria-hidden="true">ⓘ</span>
+    <p>
+      <b>Two models, one GPU.</b> Teacher <code>Qwen2.5-1.5B-Instruct</code> and student <code>Llama-3.2-1B</code>
+      together are ~2&nbsp;GB of VRAM, so they load <b>sequentially</b> and the previous one is
+      <code>unload()</code>ed before the next runs — exactly the constraint the server sidesteps with a real GPU.
+      No WebGPU? Hit <b>Run demo</b> for a recorded comparison so the charts still render.
+    </p>
+  </div>
+
+  <!-- ============ RUN ============ -->
+  <section>
+    <h2>The comparison</h2>
+    <p class="lede">Same prompt in. Two very different budgets out.</p>
+    <p class="note">
+      The teacher gets a plain helpful-assistant prompt (<code>build_single_model_prompt</code>); the student gets
+      the teacher's answer plus distillation instructions to match its quality in its own words
+      (<code>build_distillation_prompt</code>). Every run is logged as a
+      <code>(prompt, teacher_out, student_out)</code> triple.
+    </p>
+
+    <div class="controls">
+      <label for="sample">Prompt</label>
+      <select id="sample"></select>
+      <button id="run-demo" class="primary">▸ Run demo</button>
+      <button id="run-live">Run live on GPU</button>
+      <button id="judge-btn" title="Teacher grades the student">⚖ Judge pass</button>
+      <span class="runstate" id="runstate">Pick a prompt and run the demo.</span>
+    </div>
+    <textarea id="prompt" spellcheck="false"></textarea>
+    <div class="prog" id="prog"><i></i></div>
+
+    <div class="duo">
+      <div class="out teacher">
+        <div class="hd"><span class="role">Teacher</span><span class="mdl" id="t-model">Qwen2.5-1.5B</span><span class="spacer"></span><span class="stat" id="t-stat"></span></div>
+        <div class="body empty" id="t-body">Teacher output appears here.</div>
+      </div>
+      <div class="out student">
+        <div class="hd"><span class="role">Student</span><span class="mdl" id="s-model">Llama-3.2-1B</span><span class="spacer"></span><span class="stat" id="s-stat"></span></div>
+        <div class="body empty" id="s-body">Student output appears here.</div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict" style="display:none"></div>
+  </section>
+
+  <!-- ============ METRICS ============ -->
+  <section>
+    <h2>The payoff</h2>
+    <p class="lede">Is the student cheaper — and is it good enough?</p>
+    <p class="note">That's the whole distillation question. Latency answers "cheaper"; the teacher-as-judge scores answer "good enough".</p>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h3>Latency per prompt — teacher vs student</h3>
+      <p class="cap">Lower is cheaper. The gap is what distillation is trying to buy you.</p>
+      <div class="legend">
+        <span class="item"><span class="sw" style="background:var(--series-1)"></span> Teacher</span>
+        <span class="item"><span class="sw" style="background:var(--series-2)"></span> Student</span>
+      </div>
+      <div class="scroll" id="chart-latency"></div>
+    </div>
+
+    <div class="card">
+      <h3>Teacher-as-judge — student scores</h3>
+      <p class="cap">The teacher grades the student 1–5 on three axes (<code>build_comparison_prompt</code>). Run a judge pass to fill this in.</p>
+      <div class="scroll" id="chart-judge"></div>
+    </div>
+  </section>
+
+  <!-- ============ DATASET ============ -->
+  <section>
+    <h2>The dataset</h2>
+    <p class="lede">Every run is a training row you can keep.</p>
+    <p class="note">
+      Each comparison is stored to IndexedDB and can be exported as JSON in the exact shape of the backend's
+      <code>GET /prompts/export/project/{id}</code> — a project with prompts, each carrying its teacher and student
+      responses, latencies and judge scores. That file is a distillation dataset: prompts paired with teacher
+      targets, ready to fine-tune a smaller student.
+    </p>
+    <div class="controls">
+      <button id="export-btn" class="primary">⤓ Download dataset JSON</button>
+      <button id="clear-btn">Clear log</button>
+      <span class="runstate" id="logstate">No runs logged yet.</span>
+    </div>
+    <div class="log" id="log"></div>
+
+    <details>
+      <summary style="cursor:pointer;font-size:.8rem;color:var(--theme-accent);margin-top:.9rem">Show the export shape</summary>
+      <pre class="code" id="export-shape"></pre>
+    </details>
+  </section>
+
+  <footer>
+    Runs 100% in your browser — no server, no API keys. Ported from
+    <a href="https://github.com/credo92/vllm-model-distillation" target="_blank" rel="noopener">credo92/vllm-model-distillation</a>.
+    <a href="/home.html">About Vipul</a> · <a href="/rag.html">RAG playground</a> · <a href="/evals.html">Evals</a>
+  </footer>
+</main>
+
+<script type="module">
+/* ============================================================
+   Ported from credo92/vllm-model-distillation.
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const tip = $("#tip");
+function bindTip(el, html){
+  el.addEventListener("mousemove", e => { tip.innerHTML = html; tip.classList.add("on"); tip.style.left = Math.min(e.clientX+14, innerWidth-290)+"px"; tip.style.top = (e.clientY+16)+"px"; });
+  el.addEventListener("mouseleave", () => tip.classList.remove("on"));
+}
+const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+const approxTokens = t => Math.ceil((t||"").length / 4);
+
+const MODELS = {
+  teacher: { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5-1.5B-Instruct" },
+  student: { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama-3.2-1B-Instruct" },
+};
+
+/* ============================================================
+   1. PROMPT TEMPLATES  (port of backend/core/prompts.py)
+   ============================================================ */
+function buildSingleModelPrompt(userPrompt, context){
+  let base = "You are a helpful large language model.";
+  if (context) base += "\n\nAdditional context:\n" + context.trim();
+  return `${base}\n\nUser request:\n${userPrompt.trim()}`;
+}
+function buildDistillationPrompt(teacherOutput, userPrompt, targetStyle){
+  const style = (targetStyle && targetStyle.trim()) || "Match the clarity, level of detail, and reasoning quality of the teacher response.";
+  return [
+    "You are an open-source student model being trained via distillation.",
+    "",
+    "Below is a user prompt and the response from a teacher model. Produce your own",
+    "answer that closely matches the teacher's quality while using your own words.",
+    "",
+    "Distillation instructions:",
+    `- ${style}`,
+    "- Do not mention that you are imitating another model.",
+    "- Provide a single, self-contained answer.",
+    "",
+    `User prompt:\n${userPrompt.trim()}`,
+    "",
+    `Teacher response:\n${teacherOutput.trim()}`,
+    "",
+    "Student response:",
+  ].join("\n");
+}
+function buildComparisonPrompt(userPrompt, teacherOutput, studentOutput){
+  return [
+    "You are an evaluator model grading a STUDENT answer against a TEACHER answer for the same prompt.",
+    "Score the STUDENT from 1 (poor) to 5 (excellent) on each axis: correctness, completeness, clarity.",
+    'Reply with ONLY JSON: {"correctness":N,"completeness":N,"clarity":N,"verdict":"TEACHER|STUDENT|TIE","comment":"one sentence"}.',
+    "",
+    `User prompt:\n${userPrompt.trim()}`,
+    "",
+    `TEACHER response:\n${teacherOutput.trim()}`,
+    "",
+    `STUDENT response:\n${studentOutput.trim()}`,
+  ].join("\n");
+}
+
+/* ============================================================
+   2. SAMPLE PROMPTS + RECORDED DEMO
+   ============================================================ */
+const SAMPLES = [
+  "Explain what knowledge distillation is to a backend engineer, in three sentences.",
+  "Write a Python function that returns the nth Fibonacci number iteratively.",
+  "Summarize why a startup might prefer a small fine-tuned model over a large API model.",
+];
+// Recorded outputs so the charts render with zero download (mirrors evals.html demo mode).
+const DEMO = {
+  0: {
+    teacher: "Knowledge distillation trains a small \"student\" model to reproduce the behaviour of a larger, more capable \"teacher\" model. Instead of learning only from hard labels, the student learns from the teacher's full output distribution, which carries richer signal about how the teacher reasons. The result is a compact model that keeps much of the teacher's quality at a fraction of the compute and latency cost.",
+    student: "Distillation is how you shrink a model without starting from scratch: a big teacher model answers, and a small student model is trained to match those answers. The student copies the teacher's outputs rather than just the correct labels, so it picks up nuance the labels alone would miss. You end up with a cheaper, faster model that behaves a lot like the expensive one.",
+    tMs: 4120, sMs: 1780, judge: { correctness:5, completeness:4, clarity:5, verdict:"STUDENT", comment:"Nearly matches the teacher and is a touch more approachable." },
+  },
+  1: {
+    teacher: "def fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n\n# fib(0) == 0, fib(1) == 1, fib(10) == 55",
+    student: "def fib(n):\n    if n < 2:\n        return n\n    a, b = 0, 1\n    for _ in range(n - 1):\n        a, b = b, a + b\n    return b",
+    tMs: 2650, sMs: 1230, judge: { correctness:5, completeness:5, clarity:4, verdict:"TIE", comment:"Both correct; teacher's is slightly cleaner but student added an early return." },
+  },
+  2: {
+    teacher: "A small fine-tuned model can be dramatically cheaper and faster to run, which matters when every request hits your own infrastructure at scale. It also keeps data in-house — no prompts leaving for a third-party API — and gives predictable latency and cost. For a narrow, well-defined task, a tuned small model often matches a large general one where it counts.",
+    student: "For a startup, a small tuned model means lower cost per request and no dependency on an external API's pricing or uptime. Your data stays on your own servers, and latency is steady because you control the hardware. On a focused task it can be just as good as a big model, without the overhead.",
+    tMs: 3890, sMs: 1610, judge: { correctness:4, completeness:4, clarity:5, verdict:"STUDENT", comment:"Covers the same points concisely; drops the 'predictable cost' nuance slightly." },
+  },
+};
+
+/* ============================================================
+   3. STATE + IndexedDB LOG
+   ============================================================ */
+let RUNS = [];  // { id, text, teacher:{...}, student:{...}, judge:{...}|null, created_at }
+let nextId = 1;
+
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open("distill-demo",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbSet(k,v){ try{ const db=await idbOpen(); await new Promise((res,rej)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=res; tx.onerror=()=>rej(tx.error);}); }catch(e){} }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const tx=db.transaction("kv","readonly"); const rq=tx.objectStore("kv").get(k); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error);}); }catch(e){ return null; } }
+async function persist(){ await idbSet("runs", RUNS); await idbSet("nextId", nextId); }
+
+function logRun(run){ RUNS.push(run); persist(); renderLog(); renderMetrics(); }
+
+/* ============================================================
+   4. web-llm — sequential load + unload() between models
+   ============================================================ */
+let engine = null, engineModel = null, webllm = null;
+function resolveModelId(wanted){
+  try { const list=(webllm.prebuiltAppConfig?.model_list||[]).map(m=>m.model_id); if(list.includes(wanted)) return wanted; const base=wanted.replace(/-q4f(16|32)_1-MLC$/,""); return list.find(id=>id.startsWith(base))||wanted; } catch { return wanted; }
+}
+async function loadModel(which){
+  if (!webllm) webllm = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm");
+  const id = resolveModelId(MODELS[which].id);
+  if (engine && engineModel === id) return engine;
+  // Respect the ~2GB VRAM ceiling: free the resident model before loading the next.
+  if (engine){ setRun(`Unloading ${engineModel?.split("-")[0]}…`); try { await engine.unload(); } catch(e){} engine = null; engineModel = null; }
+  const prog = $("#prog"); prog.classList.add("on"); prog.querySelector("i").style.width = "0%";
+  setRun(`Loading ${which} — <b>${MODELS[which].label}</b>…`);
+  engine = await webllm.CreateMLCEngine(id, {
+    initProgressCallback: r => { const p = Math.round((r.progress||0)*100); prog.querySelector("i").style.width = p + "%"; setRun(`Loading ${which} — <b>${p}%</b>`); },
+  });
+  engineModel = id;
+  prog.querySelector("i").style.width = "100%"; setTimeout(()=>prog.classList.remove("on"), 400);
+  return engine;
+}
+async function generate(which, promptText, temperature=0.3){
+  const eng = await loadModel(which);
+  const t0 = performance.now();
+  const reply = await eng.chat.completions.create({ messages: [{ role:"user", content: promptText }], temperature });
+  const ms = Math.round(performance.now() - t0);
+  const content = reply?.choices?.[0]?.message?.content?.trim() || "";
+  const tokens = reply?.usage?.completion_tokens || approxTokens(content);
+  return { content, ms, tokens };
+}
+
+/* ============================================================
+   5. RUN FLOWS
+   ============================================================ */
+const setRun = h => $("#runstate").innerHTML = h;
+function showTeacher(o){ $("#t-body").textContent = o.content; $("#t-body").classList.remove("empty"); $("#t-stat").textContent = `${o.ms} ms · ${o.tokens} tok`; }
+function showStudent(o){ $("#s-body").textContent = o.content; $("#s-body").classList.remove("empty"); $("#s-stat").textContent = `${o.ms} ms · ${o.tokens} tok`; }
+function showVerdict(j){
+  const v = $("#verdict");
+  if (!j){ v.style.display = "none"; return; }
+  v.style.display = "block";
+  v.innerHTML = `<b>Judge:</b> correctness ${j.correctness}/5 · completeness ${j.completeness}/5 · clarity ${j.clarity}/5 — verdict <b>${j.verdict}</b>. <span class="muted">${esc(j.comment||"")}</span>`;
+}
+
+function currentPrompt(){ return $("#prompt").value.trim(); }
+
+async function runDemo(){
+  const idx = +$("#sample").value;
+  const d = DEMO[idx] || DEMO[0];
+  const text = currentPrompt() || SAMPLES[idx];
+  const teacher = { content:d.teacher, ms:d.tMs, tokens: approxTokens(d.teacher) };
+  const student = { content:d.student, ms:d.sMs, tokens: approxTokens(d.student) };
+  showTeacher(teacher); showStudent(student); showVerdict(d.judge);
+  logRun({ id: nextId++, text, teacher: { ...teacher, model: MODELS.teacher.label, role:"teacher" }, student: { ...student, model: MODELS.student.label, role:"student" }, judge: d.judge, created_at: new Date().toISOString() });
+  setRun("Showing a <b>recorded</b> demo comparison.");
+}
+
+async function runLive(){
+  if (!navigator.gpu){ setRun("<b>WebGPU unavailable.</b> Open in desktop Chrome/Edge, or use Run demo."); return; }
+  const text = currentPrompt(); if (!text){ setRun("Enter a prompt first."); return; }
+  disableRun(true); showVerdict(null);
+  $("#t-body").textContent = "…"; $("#s-body").textContent = "…"; $("#t-body").classList.remove("empty"); $("#s-body").classList.remove("empty");
+  try {
+    // Teacher first.
+    setRun("Teacher generating…");
+    const teacher = await generate("teacher", buildSingleModelPrompt(text));
+    showTeacher(teacher);
+    // Student second — loadModel() unloads the teacher first (VRAM ceiling).
+    setRun("Student generating…");
+    const student = await generate("student", buildDistillationPrompt(teacher.content, text));
+    showStudent(student);
+    logRun({ id: nextId++, text, teacher: { ...teacher, model: MODELS.teacher.label, role:"teacher" }, student: { ...student, model: MODELS.student.label, role:"student" }, judge: null, created_at: new Date().toISOString() });
+    setRun("Live run complete — hit <b>Judge pass</b> to grade the student.");
+  } catch(e){ setRun("Live run failed: " + (e.message||e)); }
+  finally { disableRun(false); }
+}
+
+async function judgePass(){
+  const run = RUNS[RUNS.length - 1];
+  if (!run){ setRun("Run a comparison first."); return; }
+  if (!navigator.gpu){ setRun("<b>WebGPU unavailable</b> for a live judge — demo runs already include recorded judge scores."); return; }
+  disableRun(true);
+  try {
+    setRun("Teacher judging the student…");
+    const eng = await loadModel("teacher");  // teacher is the judge
+    const reply = await eng.chat.completions.create({ messages: [{ role:"user", content: buildComparisonPrompt(run.text, run.teacher.content, run.student.content) }], temperature: 0 });
+    const raw = reply?.choices?.[0]?.message?.content || "";
+    let j = null;
+    try { const p = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || "{}"); if (p.correctness) j = { correctness:clamp(p.correctness), completeness:clamp(p.completeness), clarity:clamp(p.clarity), verdict:p.verdict||"—", comment:p.comment||"" }; } catch {}
+    if (!j){ setRun("Judge did not return valid JSON."); return; }
+    run.judge = j; persist(); showVerdict(j); renderMetrics(); renderLog();
+    setRun("Judge pass complete.");
+  } catch(e){ setRun("Judge failed: " + (e.message||e)); }
+  finally { disableRun(false); }
+}
+const clamp = n => Math.max(1, Math.min(5, Math.round(+n)));
+function disableRun(b){ ["run-demo","run-live","judge-btn"].forEach(id => $("#"+id).disabled = b); }
+
+/* ============================================================
+   6. METRICS + CHARTS (evals.html SVG idiom)
+   ============================================================ */
+function renderMetrics(){ renderKPIs(); renderLatency(); renderJudge(); }
+
+function renderKPIs(){
+  if (!RUNS.length){ $("#kpis").innerHTML = ""; return; }
+  const tMs = mean(RUNS.map(r=>r.teacher.ms)), sMs = mean(RUNS.map(r=>r.student.ms));
+  const judged = RUNS.filter(r=>r.judge);
+  const avgJudge = judged.length ? mean(judged.flatMap(r=>[r.judge.correctness,r.judge.completeness,r.judge.clarity])) : null;
+  const tiles = [
+    { lab:"Runs logged", val: RUNS.length, sub:"training rows" },
+    { lab:"Teacher latency", val: Math.round(tMs)+" ms", sub:"mean" },
+    { lab:"Student latency", val: Math.round(sMs)+" ms", sub: sMs? `${(tMs/sMs).toFixed(1)}× faster` : "mean" },
+    { lab:"Student judge", val: avgJudge!=null ? avgJudge.toFixed(1)+"/5" : "—", sub: judged.length?`${judged.length} judged`:"run a judge pass" },
+  ];
+  $("#kpis").innerHTML = tiles.map(t=>`<div class="kpi"><div class="lab">${t.lab}</div><div class="val">${t.val}</div><div class="sub">${t.sub}</div></div>`).join("");
+}
+
+function renderLatency(){
+  const box = $("#chart-latency");
+  if (!RUNS.length){ box.innerHTML = `<p class="muted" style="font-size:.8rem">Run a comparison to populate this chart.</p>`; return; }
+  const rows = RUNS.slice(-8);
+  const W=640, rowH=46, padL=54, padR=64, top=8;
+  const H = top + rows.length*rowH + 20;
+  const plot = W - padL - padR;
+  const maxMs = Math.max(...rows.flatMap(r=>[r.teacher.ms, r.student.ms]), 1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Latency per prompt, teacher versus student">`;
+  for (let i=0;i<=4;i++){ const x=padL+plot*(i/4); s+=`<line x1="${x}" y1="${top}" x2="${x}" y2="${top+rows.length*rowH}" stroke="var(--grid)" stroke-width="1"/>`; s+=`<text x="${x}" y="${H-5}" fill="var(--ink-muted)" font-size="10" text-anchor="middle">${Math.round(maxMs*i/4)}ms</text>`; }
+  rows.forEach((r,i) => {
+    const y = top + i*rowH + 6;
+    const tw = Math.max(2, plot*(r.teacher.ms/maxMs)), sw = Math.max(2, plot*(r.student.ms/maxMs));
+    s += `<text x="${padL-8}" y="${y+16}" fill="var(--theme-fg-subtle)" font-size="11" text-anchor="end">#${r.id}</text>`;
+    s += `<rect class="bar" data-tip="Teacher #${r.id}: ${r.teacher.ms} ms" x="${padL}" y="${y}" width="${tw}" height="14" rx="3" fill="var(--series-1)"/>`;
+    s += `<rect class="bar" data-tip="Student #${r.id}: ${r.student.ms} ms" x="${padL}" y="${y+18}" width="${sw}" height="14" rx="3" fill="var(--series-2)"/>`;
+  });
+  s += `<line x1="${padL}" y1="${top}" x2="${padL}" y2="${top+rows.length*rowH}" stroke="var(--axis)" stroke-width="1"/></svg>`;
+  box.innerHTML = s;
+  box.querySelectorAll(".bar").forEach(el => bindTip(el, el.dataset.tip));
+}
+
+function renderJudge(){
+  const box = $("#chart-judge");
+  const judged = RUNS.filter(r=>r.judge);
+  if (!judged.length){ box.innerHTML = `<p class="muted" style="font-size:.8rem">No judge scores yet — run a demo (recorded scores) or a live judge pass.</p>`; return; }
+  const axes = [["correctness","correctness"],["completeness","completeness"],["clarity","clarity"]];
+  const avg = axes.map(([k]) => mean(judged.map(r=>r.judge[k])));
+  const W=640, rowH=48, padL=118, padR=48, top=10;
+  const H = top + axes.length*rowH + 8;
+  const plot = W - padL - padR;
+  const ramp = ["var(--seq-250)","var(--seq-400)","var(--seq-550)","var(--seq-700)"];
+  const shade = v => ramp[Math.min(ramp.length-1, Math.floor((v/5)*ramp.length))];
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Teacher-as-judge student scores by axis">`;
+  for (let i=0;i<=5;i++){ const x=padL+plot*(i/5); s+=`<line x1="${x}" y1="${top}" x2="${x}" y2="${top+axes.length*rowH}" stroke="var(--grid)" stroke-width="1"/>`; s+=`<text x="${x}" y="${H-2}" fill="var(--ink-muted)" font-size="10" text-anchor="middle">${i}</text>`; }
+  axes.forEach(([k,label], i) => {
+    const y = top + i*rowH + 10, v = avg[i], w = Math.max(2, plot*(v/5));
+    s += `<text x="${padL-10}" y="${y+16}" fill="var(--theme-fg)" font-size="12" text-anchor="end">${label}</text>`;
+    s += `<rect class="bar" data-tip="${label}: ${v.toFixed(2)}/5 (mean of ${judged.length})" x="${padL}" y="${y}" width="${w}" height="22" rx="4" fill="${shade(v)}"/>`;
+    s += `<text x="${padL+w+8}" y="${y+16}" fill="var(--theme-fg)" font-size="12" font-weight="700">${v.toFixed(1)}</text>`;
+  });
+  s += `<line x1="${padL}" y1="${top}" x2="${padL}" y2="${top+axes.length*rowH}" stroke="var(--axis)" stroke-width="1"/></svg>`;
+  box.innerHTML = s;
+  box.querySelectorAll(".bar").forEach(el => bindTip(el, el.dataset.tip));
+}
+
+/* ============================================================
+   7. LOG + EXPORT  (shape of GET /prompts/export/project/{id})
+   ============================================================ */
+function renderLog(){
+  const el = $("#log");
+  if (!RUNS.length){ el.innerHTML = ""; $("#logstate").textContent = "No runs logged yet."; return; }
+  $("#logstate").innerHTML = `<b>${RUNS.length}</b> run${RUNS.length>1?"s":""} logged to IndexedDB.`;
+  el.innerHTML = RUNS.slice().reverse().map(r => `
+    <div class="logrow">
+      <div class="q">#${r.id} · ${esc(r.text.slice(0,90))}${r.text.length>90?"…":""}</div>
+      <div class="meta">teacher ${r.teacher.ms}ms/${r.teacher.tokens}tok · student ${r.student.ms}ms/${r.student.tokens}tok ${r.judge ? `· <span class="badge g">judged ${((r.judge.correctness+r.judge.completeness+r.judge.clarity)/3).toFixed(1)}/5</span>` : "· not judged"}</div>
+    </div>`).join("");
+}
+
+function buildExport(){
+  const now = new Date().toISOString();
+  return {
+    project: { id: 1, name: "browser-distillation", description: "Teacher/student comparisons captured in-browser", created_at: now, updated_at: now },
+    prompts: RUNS.map(r => ({
+      id: r.id, text: r.text, created_at: r.created_at,
+      responses: [
+        { id: r.id*2-1, model_name: r.teacher.model, role: "teacher", content: r.teacher.content, latency_ms: r.teacher.ms, score: null, metadata: { completion_tokens: r.teacher.tokens }, created_at: r.created_at },
+        { id: r.id*2,   model_name: r.student.model, role: "student", content: r.student.content, latency_ms: r.student.ms, score: r.judge ? +((r.judge.correctness+r.judge.completeness+r.judge.clarity)/3).toFixed(2) : null, metadata: r.judge ? { completion_tokens: r.student.tokens, judge: r.judge } : { completion_tokens: r.student.tokens }, created_at: r.created_at },
+      ],
+    })),
+  };
+}
+function exportJSON(){
+  if (!RUNS.length){ setRun("Nothing to export yet."); return; }
+  const blob = new Blob([JSON.stringify(buildExport(), null, 2)], { type:"application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "distillation-dataset.json"; a.click(); URL.revokeObjectURL(a.href);
+}
+
+$("#export-shape").textContent = JSON.stringify({
+  project: { id: 1, name: "browser-distillation", description: "…", created_at: "…", updated_at: "…" },
+  prompts: [ { id: 1, text: "…", created_at: "…", responses: [
+    { model_name: "Qwen2.5-1.5B-Instruct", role: "teacher", content: "…", latency_ms: 4120, score: null, metadata: { completion_tokens: 96 } },
+    { model_name: "Llama-3.2-1B-Instruct", role: "student", content: "…", latency_ms: 1780, score: 4.7, metadata: { completion_tokens: 74, judge: { correctness:5, completeness:4, clarity:5 } } },
+  ] } ],
+}, null, 2);
+
+/* ============================================================
+   8. WIRE-UP + BOOT
+   ============================================================ */
+$("#sample").innerHTML = SAMPLES.map((s,i)=>`<option value="${i}">${esc(s.slice(0,52))}${s.length>52?"…":""}</option>`).join("");
+$("#sample").addEventListener("change", () => { $("#prompt").value = SAMPLES[+$("#sample").value]; });
+$("#prompt").value = SAMPLES[0];
+$("#t-model").textContent = MODELS.teacher.label;
+$("#s-model").textContent = MODELS.student.label;
+
+$("#run-demo").addEventListener("click", runDemo);
+$("#run-live").addEventListener("click", runLive);
+$("#judge-btn").addEventListener("click", judgePass);
+$("#export-btn").addEventListener("click", exportJSON);
+$("#clear-btn").addEventListener("click", () => { RUNS = []; nextId = 1; persist(); renderLog(); renderMetrics(); showVerdict(null); setRun("Log cleared."); });
+addEventListener("resize", () => { if (RUNS.length){ renderLatency(); renderJudge(); } });
+
+(async function boot(){
+  const saved = await idbGet("runs"); const savedId = await idbGet("nextId");
+  if (Array.isArray(saved) && saved.length){ RUNS = saved; nextId = savedId || (Math.max(...RUNS.map(r=>r.id))+1); }
+  renderLog(); renderMetrics();
+})();
+</script>
+</body>
+</html>
