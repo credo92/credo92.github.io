@@ -123,6 +123,24 @@
     .hit .bar > i { display:block; height:100%; background:linear-gradient(90deg, var(--seq-250), var(--seq-550)); }
     .hit .txt { font-size:.82rem; color:var(--theme-fg-muted); line-height:1.5; }
 
+    /* corpus → vectors */
+    .corpus { display:flex; flex-direction:column; gap:.55rem; }
+    .cline { border:1px solid var(--theme-border); border-radius:.6rem; padding:.6rem .75rem; background:var(--theme-bg); transition:border-color .12s ease, box-shadow .12s ease; }
+    .cline.top { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
+    .cline .ctext { font-size:.82rem; color:var(--theme-fg); line-height:1.5; }
+    .cline .ctext .rk { font-size:.6rem; font-weight:700; color:var(--theme-accent-fg); background:var(--series-1); border-radius:999px; padding:.05rem .4rem; margin-right:.4rem; vertical-align:middle; }
+    .cline .vstrip { display:flex; gap:1px; margin-top:.45rem; height:16px; border-radius:3px; overflow:hidden; background:var(--theme-bg-subtle); }
+    .cline .vstrip .vcell { flex:1 1 auto; }
+    .cline .vnums { margin-top:.32rem; font-size:.66rem; font-family:ui-monospace,Menlo,monospace; color:var(--theme-fg-subtle); overflow-x:auto; white-space:nowrap; }
+    .cline .scorebar { display:flex; align-items:center; gap:.5rem; margin-top:.5rem; }
+    .cline .scorebar .lab { font-size:.6rem; text-transform:uppercase; letter-spacing:.04em; color:var(--theme-fg-subtle); }
+    .cline .scorebar .track { flex:1; height:8px; border-radius:999px; background:var(--theme-bg-subtle); overflow:hidden; }
+    .cline .scorebar .track > i { display:block; height:100%; background:linear-gradient(90deg, var(--seq-250), var(--seq-550)); transition:width .25s ease; }
+    .cline .scorebar .sval { font-size:.7rem; font-weight:700; color:var(--series-1); font-variant-numeric:tabular-nums; }
+    .veclegend { display:flex; align-items:center; gap:.8rem; font-size:.66rem; color:var(--theme-fg-subtle); margin-top:.2rem; }
+    .veclegend .sw { display:inline-flex; align-items:center; gap:.3rem; }
+    .veclegend .sw i { width:10px; height:10px; border-radius:2px; display:inline-block; }
+
     .samples { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.6rem; }
     .thumb { width:74px; height:74px; object-fit:cover; border-radius:.5rem; border:2px solid var(--theme-border); cursor:pointer; transition:border-color .12s ease; }
     .thumb:hover, .thumb.sel { border-color:var(--theme-accent); }
@@ -226,17 +244,29 @@ a plate of food</textarea>
 
       <div class="controls">
         <button class="primary" id="emb-load">▸ Load model &amp; embed corpus</button>
-        <span class="runstate" id="emb-state">Idle.</span>
+        <span class="runstate" id="emb-state">Idle — showing the raw corpus below.</span>
       </div>
       <div class="prog" id="emb-prog"><i></i></div>
+
+      <div class="card">
+        <h3>The corpus → vectors</h3>
+        <p class="cap">Each line is embedded into a 384-dim unit vector. The strip is a fingerprint of the first 48 dimensions; after a search, each line also shows its cosine similarity to your query.</p>
+        <div class="veclegend">
+          <span class="sw"><i style="background:rgba(208,59,59,.85)"></i> + positive</span>
+          <span class="sw"><i style="background:rgba(42,120,214,.85)"></i> − negative</span>
+          <span>brighter = larger magnitude</span>
+        </div>
+        <div class="corpus" id="corpus-list"></div>
+      </div>
+
       <div class="card">
         <h3>Ask the corpus</h3>
-        <p class="cap">Try “how do machines understand images?” or “a fast way to reduce model size”.</p>
+        <p class="cap">Try “how do machines understand images?” or “a fast way to reduce model size”. Every line is scored above; the best match is highlighted.</p>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap">
           <input type="text" id="emb-query" placeholder="Search by meaning…" style="flex:1; min-width:16rem" />
           <button id="emb-search">Search</button>
         </div>
-        <div id="emb-hits"></div>
+        <div class="runstate" id="emb-result" style="margin-top:.6rem"></div>
       </div>
     </section>
 
@@ -422,30 +452,64 @@ function cosine(a, b) {   // reused from rag.html
   for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
   return (na === 0 || nb === 0) ? 0 : dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
+// a compact "fingerprint" of the first N dims of a vector (red=+, blue=−, brighter=bigger)
+function vecStrip(vec, dims = 48) {
+  let s = "";
+  const n = Math.min(dims, vec.length);
+  for (let i = 0; i < n; i++) {
+    const v = vec[i];
+    const mag = Math.min(1, Math.abs(v) / 0.14);            // normalized dims sit around ±0.14
+    const a = (0.12 + 0.88 * mag).toFixed(2);
+    const col = v >= 0 ? `rgba(208,59,59,${a})` : `rgba(42,120,214,${a})`;
+    s += `<span class="vcell" style="background:${col}"></span>`;
+  }
+  return s;
+}
+// Render the corpus. vecs → show each line's fingerprint; scores → add cosine bars + rank.
+function renderCorpus(vecs, scores) {
+  const max = scores ? Math.max(...scores, 1e-6) : 0;
+  const order = scores ? [...scores.keys()].sort((a, b) => scores[b] - scores[a]) : [];
+  const rankOf = {}; order.forEach((idx, r) => rankOf[idx] = r + 1);
+  const topIdx = scores ? order[0] : -1;
+  $("#corpus-list").innerHTML = CORPUS.map((text, i) => {
+    const vec = vecs ? vecs[i] : null;
+    const sc = scores ? scores[i] : null;
+    const rk = (sc != null && rankOf[i] <= 3) ? `<span class="rk">#${rankOf[i]}</span>` : "";
+    return `<div class="cline ${i === topIdx ? "top" : ""}">
+      <div class="ctext">${rk}${esc(text)}</div>
+      ${vec ? `<div class="vstrip" title="first 48 of 384 dimensions">${vecStrip(vec)}</div>
+        <div class="vnums">[ ${Array.from(vec.slice(0, 6)).map(x => (x >= 0 ? " " : "") + x.toFixed(3)).join(", ")}, … ] · 384-dim · ‖v‖≈1</div>`
+        : `<div class="vnums" style="opacity:.7">not embedded yet — click “Load model &amp; embed corpus”.</div>`}
+      ${sc != null ? `<div class="scorebar"><span class="lab">cosine</span><div class="track"><i style="width:${Math.max(2, (sc / max) * 100)}%"></i></div><span class="sval">${sc.toFixed(3)}</span></div>` : ""}
+    </div>`;
+  }).join("");
+}
 async function embedCorpus() {
   $("#emb-load").disabled = true;
   try {
+    $("#emb-state").innerHTML = `Embedding <b>${CORPUS.length}</b> lines…`;
     corpusVecs = await embed(CORPUS);
+    renderCorpus(corpusVecs);
     $("#emb-state").innerHTML = `Embedded <b>${CORPUS.length}</b> lines · 384-dim · ready to search.`;
-  } catch (e) { $("#emb-state").textContent = "Failed: " + (e.message || e); }
+  } catch (e) { $("#emb-state").textContent = "Failed: " + (e.message || e); renderCorpus(null); }
   finally { $("#emb-load").disabled = false; }
 }
 async function search() {
   const q = $("#emb-query").value.trim(); if (!q) return;
   if (!corpusVecs) await embedCorpus();
   if (!corpusVecs) return;
+  $("#emb-result").textContent = "Embedding query & scoring every line…";
   const [qv] = await embed([q]);
-  const ranked = CORPUS.map((text, i) => ({ text, score: cosine(qv, corpusVecs[i]) })).sort((a,b) => b.score - a.score).slice(0, 5);
-  const max = Math.max(...ranked.map(r => r.score), 1e-6);
-  $("#emb-hits").innerHTML = ranked.map((r, i) => `
-    <div class="hit">
-      <div class="top"><span class="rank">#${i+1}</span><div class="bar"><i style="width:${Math.max(3,(r.score/max)*100)}%"></i></div><span class="score">${r.score.toFixed(3)}</span></div>
-      <div class="txt">${esc(r.text)}</div>
-    </div>`).join("");
+  const scores = corpusVecs.map(v => cosine(qv, v));
+  renderCorpus(corpusVecs, scores);
+  const best = scores.indexOf(Math.max(...scores));
+  $("#emb-result").innerHTML = `Top match — cosine <b>${scores[best].toFixed(3)}</b>: “${esc(CORPUS[best])}”`;
+  document.querySelector("#corpus-list .cline.top")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 $("#emb-load").addEventListener("click", embedCorpus);
 $("#emb-search").addEventListener("click", search);
 $("#emb-query").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+renderCorpus(null);   // show the raw corpus lines up front, before embedding
 </script>
 </body>
 </html>
