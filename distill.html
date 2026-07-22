@@ -431,7 +431,7 @@ async function judgePass(){
     const reply = await eng.chat.completions.create({ messages: [{ role:"user", content: buildComparisonPrompt(run.text, run.teacher.content, run.student.content) }], temperature: 0 });
     const raw = reply?.choices?.[0]?.message?.content || "";
     let j = null;
-    try { const p = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || "{}"); if (p.correctness) j = { correctness:clamp(p.correctness), completeness:clamp(p.completeness), clarity:clamp(p.clarity), verdict:p.verdict||"—", comment:p.comment||"" }; } catch {}
+    try { const p = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || "{}"); if (p.correctness) j = { correctness:clamp(p.correctness), completeness:clamp(p.completeness), clarity:clamp(p.clarity), verdict:sanitizeVerdict(p.verdict), comment:p.comment||"" }; } catch {}
     if (!j){ setRun("Judge did not return valid JSON."); return; }
     run.judge = j; persist(); showVerdict(j); renderMetrics(); renderLog();
     setRun("Judge pass complete.");
@@ -439,6 +439,8 @@ async function judgePass(){
   finally { disableRun(false); }
 }
 const clamp = n => Math.max(1, Math.min(5, Math.round(+n)));
+// small models sometimes echo the literal "TEACHER|STUDENT|TIE" enum — keep only a real choice
+function sanitizeVerdict(v){ const s = String(v||"").toUpperCase(); for (const opt of ["TEACHER","STUDENT","TIE"]) if (s === opt) return opt; return "—"; }
 function disableRun(b){ ["run-demo","run-live","judge-btn"].forEach(id => $("#"+id).disabled = b); }
 
 /* ============================================================
