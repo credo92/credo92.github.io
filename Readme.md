@@ -8,11 +8,11 @@ your GPU via WebGPU. Deployed with GitHub Pages.
 
 | Page | What it is |
 | --- | --- |
-| [`/`](https://credo92.github.io/) | A Claude Code–style **AI coding agent** that edits a virtual project in a terminal, running on a tiny local model. |
+| [`/`](https://credo92.github.io/) | **Home** — about Vipul, and a hub linking to every playground. |
+| [`/agent.html`](https://credo92.github.io/agent.html) | A Claude Code–style **AI coding agent** that edits a virtual project in a terminal, running on a tiny local model. |
 | [`/rag.html`](https://credo92.github.io/rag.html) | A from-scratch **RAG pipeline**, every step drawn on screen. |
 | [`/distill.html`](https://credo92.github.io/distill.html) | **Model distillation**, teacher vs student, side by side. |
 | [`/evals.html`](https://credo92.github.io/evals.html) | What an **LLM eval** is, with charts you can read. |
-| [`/home.html`](https://credo92.github.io/home.html) | About Vipul & projects. |
 
 ---
 

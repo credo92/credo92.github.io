@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vipul Srivastava — In-Browser AI Coding Agent</title>
+  <meta name="description" content="A Claude Code-style coding agent running 100% in your browser via WebGPU. No servers, no API keys — a tiny open-source model edits a virtual project live." />
+  <link rel="icon" href="/favicon.ico" sizes="16x16" type="image/png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Vipul Srivastava — In-Browser AI Coding Agent" />
+  <meta property="og:description" content="A Claude Code-style coding agent running 100% in your browser via WebGPU — no servers, no API keys. A tiny open-source model edits a virtual project live." />
+  <meta property="og:url" content="https://credo92.github.io/agent.html" />
+  <meta property="og:image" content="https://credo92.github.io/assets/screens/rag.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Xterm.js terminal UI -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+
+  <!-- Brand fonts (shared with the personal landing) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css?family=Alfa+Slab+One|Indie+Flower&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f5;        /* warm white page */
+      --panel: #ffffff;
+      --panel-2: #eef0ee;
+      --text: #1f2933;
+      --muted: #64748b;
+      --accent: #2a6db0;    /* deeper sky blue for light bg */
+      --accent-2: #7c5cd6;  /* violet */
+      --border: #e2e2e2;
+      --ok: #0a7d33;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 16px 18px 12px;
+      background:
+        radial-gradient(1100px 520px at 82% -8%, rgba(56,189,248,.14), transparent 60%),
+        radial-gradient(900px 480px at 8% 8%, rgba(167,139,250,.12), transparent 55%),
+        var(--bg);
+    }
+
+    /* Header bar */
+    header.bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; line-height: 1.15; }
+    .brand .logo {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex-shrink: 0;
+      border-radius: 11px;
+      font-family: "Menlo", monospace; font-size: 17px; font-weight: 700;
+      color: #06202e;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      box-shadow: 0 6px 20px rgba(56,189,248,.28);
+    }
+    .brand .brandtext { display: flex; flex-direction: column; }
+    .brand .name {
+      font-family: "Alfa Slab One", cursive;
+      font-size: 20px;
+      letter-spacing: .3px;
+      color: var(--text);
+    }
+    .brand .name a { color: inherit; text-decoration: none; }
+    .brand .name a:hover { color: var(--accent); }
+    .brand .tag {
+      font-family: "Indie Flower", cursive;
+      font-size: 15px;
+      color: var(--accent-2);
+    }
+    .spacer { flex: 1 1 auto; }
+
+    .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .controls label { font-size: 12px; color: var(--muted); }
+    select, button.ghost {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color .15s ease, transform .1s ease, box-shadow .15s ease;
+    }
+    button.ghost { font-weight: 600; }
+    select:hover, button.ghost:hover { border-color: var(--accent); }
+    button.ghost:hover { box-shadow: 0 4px 16px rgba(56,189,248,.18); transform: translateY(-1px); }
+    button.ghost:active { transform: translateY(0); }
+    select:disabled, button.ghost:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .links { display: flex; align-items: center; }
+    .links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      margin-left: 14px;
+      border-bottom: 1px dashed transparent;
+      transition: color .15s ease, border-color .15s ease;
+    }
+    .links a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Notice callout (top of page) */
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin-top: 14px;
+      padding: 12px 15px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(56,189,248,.07), rgba(56,189,248,.02));
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .notice .notice-icon {
+      flex-shrink: 0;
+      font-size: 14px;
+      color: var(--accent);
+      margin-top: 1px;
+    }
+    .notice p { margin: 0; }
+    .notice b { color: var(--text); font-weight: 600; }
+    .notice code {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11.5px;
+      color: var(--accent);
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      margin: 12px 0 0;
+      height: 6px;
+      background: var(--panel-2);
+      border-radius: 999px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-wrap.on { display: block; }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width .2s ease;
+    }
+    .status-line {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 8px 2px 0;
+      min-height: 16px;
+    }
+    .status-line b { color: var(--accent); font-weight: 600; }
+
+    /* Terminal window */
+    #terminal-wrap {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      margin-top: 10px;
+      background: #fbfbfa;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-height: 320px;
+      overflow: hidden;
+      box-shadow: 0 18px 50px rgba(15,23,42,.12), 0 1px 0 rgba(255,255,255,.6) inset;
+    }
+    .term-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      background: #f0f1ef;
+      border-bottom: 1px solid var(--border);
+    }
+    .term-titlebar .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .term-titlebar .dot.red { background: #ff5f57; }
+    .term-titlebar .dot.yellow { background: #febc2e; }
+    .term-titlebar .dot.green { background: #28c840; }
+    .term-titlebar .term-title {
+      margin-left: 8px;
+      font-family: "Menlo", monospace;
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    #terminal { flex: 1 1 auto; min-height: 0; width: 100%; padding: 10px 12px; }
+
+    footer.foot {
+      margin-top: 12px;
+      font-size: 11.5px;
+      color: var(--muted);
+      text-align: center;
+      opacity: .85;
+    }
+    footer.foot a { color: var(--accent); text-decoration: none; }
+    footer.foot a:hover { text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      .brand .name { font-size: 17px; }
+      .brand .logo { width: 34px; height: 34px; font-size: 15px; }
+      #terminal-wrap { min-height: 260px; }
+      .notice { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="bar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">▸_</span>
+      <span class="brandtext">
+        <span class="name"><a href="/" title="Home — Vipul Srivastava">Vipul Srivastava</a></span>
+        <span class="tag">an AI coding agent, running entirely in your browser</span>
+      </span>
+    </div>
+    <div class="spacer"></div>
+    <div class="controls">
+      <label for="model">Model</label>
+      <select id="model" title="Local model (runs on your GPU)">
+        <option value="Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B (best for code)</option>
+        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (lightest)</option>
+      </select>
+      <button class="ghost" id="load-btn" title="Download & start the selected model">▸ Start engine</button>
+    </div>
+    <div class="links">
+      <a href="/">Home</a>
+      <a href="/rag.html">RAG</a>
+      <a href="/distill.html">Distill</a>
+      <a href="/evals.html">Evals</a>
+      <a href="https://github.com/credo92" target="_blank" rel="noopener">@credo92</a>
+      <a href="https://github.com/vsrivastav-pm" target="_blank" rel="noopener">@vsrivastav-pm</a>
+    </div>
+  </header>
+
+  <div class="notice" role="note">
+    <span class="notice-icon" aria-hidden="true">ⓘ</span>
+    <p>
+      <b>Heads up:</b> requires a <b>WebGPU</b>-capable browser (desktop Chrome or Edge work best; Safari&nbsp;17+/Firefox partial) with hardware acceleration on.
+      The <b>first</b> load downloads the model weights (~0.7–1&nbsp;GB) into your browser cache — after that it starts fast and the model reasons offline on your own GPU.
+      It's a tiny model, so edits aren't always perfect. Try <code>help</code>, <code>ls</code>, <code>cat index.js</code>, or ask it to <code>add a sum function to index.js</code>.
+    </p>
+  </div>
+
+  <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="status-line" id="status">WebGPU model runs 100% locally. Pick a model and press <b>Start engine</b> — or just type <b>help</b> below.</div>
+
+  <div id="terminal-wrap">
+    <div class="term-titlebar" aria-hidden="true">
+      <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+      <span class="term-title">credo92-agent — web-llm</span>
+    </div>
+    <div id="terminal"></div>
+  </div>
+
+  <footer class="foot">
+    Runs 100% in your browser — no server, no API keys. <a href="/">Vipul's projects &amp; more →</a>
+  </footer>
+
+  <script type="module">
+    import * as webllm from "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm";
+
+    // ---- Terminal setup -------------------------------------------------
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 13,
+      theme: {
+        background: '#fbfbfa',
+        foreground: '#1f2933',
+        cursor: '#2a6db0',
+        selectionBackground: '#cfe3f5',
+        // ANSI palette re-tuned for a light background
+        black: '#1f2933',   red: '#c0392b',   green: '#0a7d33',   yellow: '#b7791f',
+        blue: '#2a6db0',    magenta: '#8e44ad', cyan: '#1f7a8c',  white: '#5b6b7a',
+        brightBlack: '#7a8899', brightRed: '#e05a4b', brightGreen: '#12a150', brightYellow: '#d69e2e',
+        brightBlue: '#3987e5',  brightMagenta: '#a569bd', brightCyan: '#2596be', brightWhite: '#324a5e',
+      },
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(document.getElementById('terminal'));
+    fit.fit();
+    window.addEventListener('resize', () => { try { fit.fit(); } catch (e) {} });
+
+    // ANSI colour helpers
+    const C = {
+      reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m',
+      red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m',
+      blue: '\x1b[34m', cyan: '\x1b[36m', gray: '\x1b[90m', mag: '\x1b[35m',
+    };
+    const PROMPT = `${C.cyan}credo92-agent${C.reset}${C.gray}$ ${C.reset}`;
+    const writeln = (s = '') => term.writeln(s);
+    const setStatus = (html) => { document.getElementById('status').innerHTML = html; };
+
+    // ---- Virtual filesystem --------------------------------------------
+    const seedFS = () => ({
+      "index.js": [
+        "// A tiny demo module. Ask the agent to change it!",
+        "function greet(name) {",
+        "  return `Hello, ${name}!`;",
+        "}",
+        "",
+        "console.log(greet('world'));",
+        "",
+      ].join("\n"),
+      "styles.css": [
+        "body {",
+        "  font-family: system-ui, sans-serif;",
+        "  background: #0f172a;",
+        "  color: #e5e7eb;",
+        "}",
+        "",
+      ].join("\n"),
+      "README.md": [
+        "# demo-project",
+        "",
+        "A sandbox project you can edit with a browser-native AI coding agent.",
+        "",
+      ].join("\n"),
+    });
+    let virtualFS = seedFS();
+    let lastDiff = null; // { file, before, after }
+
+    // ---- Engine state ---------------------------------------------------
+    const engines = {}; // model_id -> engine (cache)
+    let engine = null;
+    let currentModel = null;
+    let busy = false;
+    const modelSelect = document.getElementById('model');
+    const loadBtn = document.getElementById('load-btn');
+    const progWrap = document.getElementById('progress-wrap');
+    const progBar = document.getElementById('progress-bar');
+
+    const webgpuOK = !!navigator.gpu;
+
+    // Resolve a requested model id against what this WebLLM build actually ships.
+    function resolveModelId(wanted) {
+      try {
+        const list = (webllm.prebuiltAppConfig?.model_list || []).map(m => m.model_id);
+        if (list.includes(wanted)) return wanted;
+        // fall back to any close variant (different quantisation) of the same family
+        const base = wanted.replace(/-q4f(16|32)_1-MLC$/, "");
+        const alt = list.find(id => id.startsWith(base));
+        return alt || wanted;
+      } catch (e) { return wanted; }
+    }
+
+    // ---- Boot banner ----------------------------------------------------
+    function banner() {
+      writeln(`${C.bold}${C.cyan}  credo92 // in-browser coding agent${C.reset}`);
+      writeln(`${C.gray}  a Claude Code-style sandbox — a tiny model edits a virtual project on your GPU${C.reset}`);
+      writeln("");
+      if (!webgpuOK) {
+        writeln(`${C.yellow}  ⚠ WebGPU is not available in this browser.${C.reset}`);
+        writeln(`${C.gray}    The AI engine can't start, but you can still explore the virtual project.${C.reset}`);
+        writeln(`${C.gray}    For the full demo, open this page in desktop ${C.reset}${C.cyan}Chrome${C.reset}${C.gray} or ${C.reset}${C.cyan}Edge${C.reset}${C.gray} with hardware acceleration enabled.${C.reset}`);
+        loadBtn.disabled = true;
+        modelSelect.disabled = true;
+        setStatus(`${'<b>WebGPU unavailable.</b> The AI engine is disabled — try <b>ls</b>, <b>cat index.js</b>, or <b>help</b>. Open in desktop Chrome/Edge for the full agent.'}`);
+      } else {
+        writeln(`${C.gray}  Press ${C.reset}${C.cyan}▸ Start engine${C.reset}${C.gray} (top-right) to download & load a model, or type ${C.reset}${C.cyan}help${C.reset}${C.gray}.${C.reset}`);
+      }
+      writeln("");
+      term.write(PROMPT);
+    }
+
+    // ---- Model loading --------------------------------------------------
+    async function ensureEngine() {
+      const wanted = resolveModelId(modelSelect.value);
+      if (engine && currentModel === wanted) return engine;
+
+      if (engines[wanted]) { engine = engines[wanted]; currentModel = wanted; return engine; }
+
+      busy = true;
+      loadBtn.disabled = true; modelSelect.disabled = true;
+      progWrap.classList.add('on');
+      progBar.style.width = '0%';
+      writeln(`${C.blue}∴ loading ${wanted} …${C.reset}`);
+
+      try {
+        engine = await webllm.CreateMLCEngine(wanted, {
+          initProgressCallback: (report) => {
+            const pct = Math.round((report.progress || 0) * 100);
+            progBar.style.width = pct + '%';
+            setStatus(`Loading <b>${modelSelect.options[modelSelect.selectedIndex].text}</b> — ${pct}%`);
+          },
+        });
+        engines[wanted] = engine;
+        currentModel = wanted;
+        progBar.style.width = '100%';
+        writeln(`${C.green}✔ model ready.${C.reset} ${C.gray}Ask me to change a file, e.g. "add a sum function to index.js".${C.reset}`);
+        setStatus(`<b>${modelSelect.options[modelSelect.selectedIndex].text}</b> ready — runs locally on your GPU.`);
+      } catch (err) {
+        writeln(`${C.red}✖ failed to load model:${C.reset} ${C.gray}${String(err && err.message || err)}${C.reset}`);
+        setStatus(`<b>Model failed to load.</b> ${String(err && err.message || err)}`);
+        engine = null; currentModel = null;
+      } finally {
+        setTimeout(() => progWrap.classList.remove('on'), 600);
+        busy = false;
+        loadBtn.disabled = false; modelSelect.disabled = false;
+      }
+      return engine;
+    }
+
+    loadBtn.addEventListener('click', async () => {
+      if (busy || !webgpuOK) return;
+      await ensureEngine();
+      term.write("\r\n" + PROMPT);
+      term.focus();
+    });
+    modelSelect.addEventListener('change', () => {
+      if (engine && resolveModelId(modelSelect.value) !== currentModel) {
+        setStatus(`Selected <b>${modelSelect.options[modelSelect.selectedIndex].text}</b> — press <b>Start engine</b> to load it.`);
+      }
+    });
+
+    // ---- Diff rendering -------------------------------------------------
+    function renderDiff(file, before, after) {
+      const a = before.split("\n");
+      const b = after.split("\n");
+      writeln(`${C.bold}diff --git a/${file} b/${file}${C.reset}`);
+      // Simple longest-common-subsequence-free diff: mark changed regions by
+      // walking both from the top and bottom to skip shared context.
+      let start = 0;
+      while (start < a.length && start < b.length && a[start] === b[start]) start++;
+      let endA = a.length - 1, endB = b.length - 1;
+      while (endA >= start && endB >= start && a[endA] === b[endB]) { endA--; endB--; }
+
+      const ctx = 2;
+      const from = Math.max(0, start - ctx);
+      const toShared = Math.min(a.length - 1, endA + ctx);
+
+      for (let i = from; i < start; i++) writeln(`${C.gray} ${a[i]}${C.reset}`);
+      for (let i = start; i <= endA; i++) writeln(`${C.red}-${a[i]}${C.reset}`);
+      for (let i = start; i <= endB; i++) writeln(`${C.green}+${b[i]}${C.reset}`);
+      for (let i = endA + 1; i <= toShared; i++) writeln(`${C.gray} ${a[i]}${C.reset}`);
+    }
+
+    // ---- Built-in shell commands ---------------------------------------
+    function fileList() { return Object.keys(virtualFS).sort(); }
+
+    function runBuiltin(cmd) {
+      const [name, ...rest] = cmd.split(/\s+/);
+      const arg = rest.join(" ").trim();
+      switch (name) {
+        case "help":
+          writeln(`${C.bold}commands${C.reset}`);
+          writeln(`  ${C.cyan}ls${C.reset}                list files in the virtual project`);
+          writeln(`  ${C.cyan}cat <file>${C.reset}        print a file`);
+          writeln(`  ${C.cyan}git diff${C.reset}          show the agent's last change`);
+          writeln(`  ${C.cyan}reset${C.reset}             restore the starting project`);
+          writeln(`  ${C.cyan}clear${C.reset}             clear the screen`);
+          writeln("");
+          writeln(`  ${C.gray}Anything else is sent to the AI agent, e.g.${C.reset}`);
+          writeln(`  ${C.green}add a sum function to index.js${C.reset}`);
+          writeln(`  ${C.green}make the body background black in styles.css${C.reset}`);
+          return true;
+        case "ls":
+          fileList().forEach(f => writeln(`  ${C.blue}${f}${C.reset}`));
+          return true;
+        case "cat": {
+          if (!arg) { writeln(`${C.yellow}usage: cat <file>${C.reset}`); return true; }
+          if (!(arg in virtualFS)) { writeln(`${C.red}cat: ${arg}: no such file${C.reset}`); return true; }
+          virtualFS[arg].split("\n").forEach(l => writeln(`${C.gray}${l}${C.reset}`));
+          return true;
+        }
+        case "git":
+          if (arg === "diff") {
+            if (!lastDiff) { writeln(`${C.gray}no changes yet — ask the agent to edit a file.${C.reset}`); return true; }
+            renderDiff(lastDiff.file, lastDiff.before, lastDiff.after);
+            return true;
+          }
+          writeln(`${C.yellow}only 'git diff' is supported here.${C.reset}`);
+          return true;
+        case "reset":
+          virtualFS = seedFS(); lastDiff = null;
+          writeln(`${C.green}✔ project reset to its starting state.${C.reset}`);
+          return true;
+        case "clear":
+          term.clear();
+          return true;
+        default:
+          return false; // not a builtin -> route to agent
+      }
+    }
+
+    // ---- Agent loop -----------------------------------------------------
+    function buildSystemPrompt() {
+      const files = Object.entries(virtualFS)
+        .map(([f, c]) => `FILE: ${f}\n"""\n${c}\n"""`).join("\n\n");
+      return [
+        "You are a terminal coding agent working inside a small virtual project.",
+        "You can edit files by rewriting their FULL new contents.",
+        "When you change a file, respond with ONE block per changed file, exactly:",
+        '<write_file file="FILENAME">',
+        "...the complete new file contents...",
+        "</write_file>",
+        "Only include files you actually changed. Keep unrelated code intact.",
+        "Add a one-sentence explanation before the block. Do not use markdown code fences.",
+        "",
+        "Current project files:",
+        "",
+        files,
+      ].join("\n");
+    }
+
+    function extractWrites(text) {
+      const out = [];
+      const re = /<write_file\s+file\s*=\s*["']([^"']+)["']\s*>([\s\S]*?)<\/write_file>/gi;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        let body = m[2].replace(/^\r?\n/, "").replace(/\r?\n\s*$/, "");
+        // tolerate a model that wraps contents in ``` fences
+        body = body.replace(/^```[a-zA-Z0-9]*\r?\n/, "").replace(/\r?\n```$/, "");
+        out.push({ file: m[1].trim(), content: body });
+      }
+      return out;
+    }
+
+    async function runAgentLoop(userPrompt) {
+      if (!webgpuOK) {
+        writeln(`${C.yellow}The AI engine needs WebGPU. Try ${C.reset}${C.cyan}ls${C.reset}${C.yellow} / ${C.reset}${C.cyan}cat index.js${C.reset}${C.yellow}, or open in desktop Chrome/Edge.${C.reset}`);
+        return;
+      }
+      if (!engine) {
+        writeln(`${C.yellow}No model loaded yet — loading now…${C.reset}`);
+        await ensureEngine();
+        if (!engine) return;
+      }
+
+      busy = true;
+      writeln(`${C.mag}∴ thinking…${C.reset}`);
+      try {
+        const messages = [
+          { role: "system", content: buildSystemPrompt() },
+          { role: "user", content: userPrompt },
+        ];
+        const reply = await engine.chat.completions.create({ messages, temperature: 0.2 });
+        const text = reply?.choices?.[0]?.message?.content || "";
+
+        const writes = extractWrites(text);
+        // Show any explanation text (everything outside the write_file blocks)
+        const explanation = text.replace(/<write_file[\s\S]*?<\/write_file>/gi, "").trim();
+        if (explanation) {
+          writeln(`${C.gray}${explanation.split("\n").join("\n")}${C.reset}`);
+        }
+
+        if (writes.length === 0) {
+          writeln(`${C.yellow}(no file edit detected — the model replied without a <write_file> block.)${C.reset}`);
+          if (!explanation) writeln(`${C.gray}${text.trim()}${C.reset}`);
+          return;
+        }
+
+        for (const w of writes) {
+          const before = (w.file in virtualFS) ? virtualFS[w.file] : "";
+          const after = w.content;
+          if (before === after) {
+            writeln(`${C.gray}${w.file}: no change.${C.reset}`);
+            continue;
+          }
+          writeln("");
+          writeln(`${C.blue}∴ editing ${w.file}${w.file in virtualFS ? "" : " (new file)"}${C.reset}`);
+          renderDiff(w.file, before, after);
+          virtualFS[w.file] = after;
+          lastDiff = { file: w.file, before, after };
+          writeln(`${C.green}✔ ${w.file} updated${C.reset} ${C.gray}(run 'cat ${w.file}' or 'git diff' to inspect)${C.reset}`);
+        }
+      } catch (err) {
+        writeln(`${C.red}✖ agent error:${C.reset} ${C.gray}${String(err && err.message || err)}${C.reset}`);
+      } finally {
+        busy = false;
+      }
+    }
+
+    // ---- Input handling -------------------------------------------------
+    let inputBuffer = "";
+    let history = [];
+    let histIdx = -1;
+
+    async function handleLine(line) {
+      const cmd = line.trim();
+      if (!cmd) return;
+      history.push(cmd); histIdx = history.length;
+      if (!runBuiltin(cmd)) {
+        await runAgentLoop(cmd);
+      }
+    }
+
+    term.onData(async (data) => {
+      if (busy) return; // ignore keystrokes while working
+
+      // Enter
+      if (data === '\r') {
+        writeln("");
+        await handleLine(inputBuffer);
+        inputBuffer = "";
+        term.write("\r\n" + PROMPT);
+        return;
+      }
+      // Backspace / Delete
+      if (data === '\x7f' || data === '\b') {
+        if (inputBuffer.length > 0) {
+          inputBuffer = inputBuffer.slice(0, -1);
+          term.write('\b \b');
+        }
+        return;
+      }
+      // Up/Down history
+      if (data === '\x1b[A' || data === '\x1b[B') {
+        if (!history.length) return;
+        histIdx += (data === '\x1b[A') ? -1 : 1;
+        histIdx = Math.max(0, Math.min(history.length, histIdx));
+        const entry = history[histIdx] || "";
+        // clear current line
+        term.write('\r' + PROMPT + ' '.repeat(inputBuffer.length) + '\r' + PROMPT);
+        inputBuffer = entry;
+        term.write(inputBuffer);
+        return;
+      }
+      // Ctrl+C
+      if (data === '\x03') {
+        writeln('^C');
+        inputBuffer = "";
+        term.write(PROMPT);
+        return;
+      }
+      // Printable characters (ignore other escape sequences)
+      if (data >= ' ' || data === '\t') {
+        inputBuffer += data;
+        term.write(data);
+      }
+    });
+
+    banner();
+    term.focus();
+  </script>
+</body>
+</html>

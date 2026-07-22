@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Geist:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
   <style>
-    /* ---------- Theme (shared with evals.html / home.html) ---------- */
+    /* ---------- Theme (shared with evals.html / index.html) ---------- */
     :root {
       color-scheme: light;
       --theme-bg: #fff;
@@ -115,6 +115,16 @@
     .gpu-status .gpu-sub b { color: var(--theme-fg); }
     button.locked, .locked { opacity:.55 !important; cursor:not-allowed !important; }
     button.locked::after { content:"🔒"; margin-left:.4rem; font-size:.85em; }
+
+    /* Shared top nav */
+    .topnav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 1.1rem; background: color-mix(in srgb, var(--theme-bg) 80%, transparent); backdrop-filter: saturate(140%) blur(10px); -webkit-backdrop-filter: saturate(140%) blur(10px); border-bottom: 1px solid var(--theme-border); }
+    .topnav .brand { display: inline-flex; align-items: center; gap: .5rem; font-family: "Libre Baskerville", Georgia, serif; font-weight: 700; font-size: .95rem; text-decoration: none; color: var(--theme-fg); white-space: nowrap; }
+    .topnav .brand .mark { display: inline-flex; align-items: center; justify-content: center; width: 1.55rem; height: 1.55rem; border-radius: 7px; flex-shrink: 0; font-family: ui-monospace, Menlo, monospace; font-size: .8rem; font-weight: 700; color: #fff; background: linear-gradient(140deg, var(--theme-accent), color-mix(in srgb, var(--theme-accent) 55%, #000)); }
+    .topnav nav { display: flex; gap: .12rem; flex-wrap: wrap; justify-content: flex-end; }
+    .topnav nav a { font-size: .8rem; font-weight: 500; text-decoration: none; color: var(--theme-fg-subtle); padding: .35rem .6rem; border-radius: .5rem; transition: color .12s ease, background .12s ease; }
+    .topnav nav a:hover { color: var(--theme-fg); background: var(--theme-bg-subtle); }
+    .topnav nav a.active { color: var(--theme-accent); font-weight: 600; }
+    @media (max-width: 560px) { .topnav { flex-direction: column; align-items: flex-start; gap: .4rem; } .topnav nav { justify-content: flex-start; } }
 
     section { margin-top: 3rem; }
     section > h2 {
@@ -225,9 +235,17 @@
 </head>
 <body>
 <div id="tip" role="tooltip"></div>
+<header class="topnav">
+  <a class="brand" href="/"><span class="mark">▸_</span>Vipul Srivastava</a>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/agent.html">Coding agent</a>
+    <a href="/rag.html" class="active">RAG</a>
+    <a href="/distill.html">Distillation</a>
+    <a href="/evals.html">Evals</a>
+  </nav>
+</header>
 <main>
-  <a class="back" href="/home.html">← Back to Vipul's projects</a>
-
   <h1 class="headline">RAG, with nothing hidden</h1>
   <p class="dek">
     Retrieval-augmented generation is usually a black box: a document goes in, an answer comes out, and the
@@ -375,7 +393,7 @@
   <footer>
     Runs 100% in your browser — no server, no API keys. Ported from
     <a href="https://github.com/credo92/vllm-chatgpt" target="_blank" rel="noopener">credo92/vllm-chatgpt</a>.
-    <a href="/home.html">About Vipul</a> · <a href="/evals.html">Evals playground</a> · <a href="/">Coding agent</a>
+    <a href="/">About Vipul</a> · <a href="/evals.html">Evals playground</a> · <a href="/agent.html">Coding agent</a>
   </footer>
 </main>
 
